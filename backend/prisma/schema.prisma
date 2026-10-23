@@ -1,0 +1,67 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum AdminRole {
+  ADMIN
+  SUPPORT
+  CATALOG_MANAGER
+}
+
+enum AdminStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+model AdminUser {
+  id           String         @id @default(uuid())
+  username     String         @unique
+  passwordHash String
+  role         AdminRole      @default(ADMIN)
+  status       AdminStatus    @default(ACTIVE)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  sessions     AdminSession[]
+  auditEvents  AuditEvent[]
+
+  @@map("admin_users")
+}
+
+model AdminSession {
+  id               String     @id @default(uuid())
+  sessionTokenHash String     @unique
+  adminUserId      String
+  adminUser        AdminUser  @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  ipAddress        String?
+  userAgent        String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@index([adminUserId])
+  @@index([sessionTokenHash])
+  @@map("admin_sessions")
+}
+
+model AuditEvent {
+  id           String     @id @default(uuid())
+  actorAdminId String?
+  actorAdmin   AdminUser? @relation(fields: [actorAdminId], references: [id], onDelete: SetNull)
+  action       String
+  resourceType String
+  resourceId   String?
+  details      Json?
+  ipAddress    String?
+  createdAt    DateTime   @default(now())
+
+  @@index([action])
+  @@index([resourceType, resourceId])
+  @@map("audit_events")
+}

@@ -1,0 +1,219 @@
+openapi: 3.1.0
+info:
+  title: Fashion E-Commerce API
+  description: Canonical API contract for Fashion E-Commerce storefront and admin operations.
+  version: 1.0.0
+servers:
+  - url: http://localhost:4000/api/v1
+    description: Local development backend
+
+paths:
+  /health/live:
+    get:
+      summary: Liveness check
+      description: Returns process uptime and status.
+      responses:
+        '200':
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  uptime:
+                    type: number
+                  timestamp:
+                    type: string
+
+  /health/ready:
+    get:
+      summary: Readiness check
+      description: Checks database connectivity and critical service dependencies.
+      responses:
+        '200':
+          description: All critical dependencies are healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ready
+                  database:
+                    type: string
+                    example: connected
+                  timestamp:
+                    type: string
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: unavailable
+                  error:
+                    type: string
+
+  /admin-auth/login:
+    post:
+      summary: Administrator login
+      description: Authenticates admin credentials, establishes a server-side session, and sets a secure cookie.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                  example: admin@store.local
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Successfully authenticated
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                description: Host-prefixed or secure session cookie (__Host-store_session or store_session)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AdminUserDTO'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /admin-auth/session:
+    get:
+      summary: Current administrator session
+      description: Retrieves the currently authenticated admin identity and permissions.
+      responses:
+        '200':
+          description: Active session found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AdminUserDTO'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /admin-auth/logout:
+    post:
+      summary: Administrator logout
+      description: Revokes the active session in the database and clears the session cookie.
+      responses:
+        '200':
+          description: Session revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      success:
+                        type: boolean
+                        example: true
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+components:
+  schemas:
+    AdminUserDTO:
+      type: object
+      required:
+        - id
+        - username
+        - role
+        - status
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        role:
+          type: string
+          example: admin
+        status:
+          type: string
+          example: active
+
+    ResponseMeta:
+      type: object
+      properties:
+        requestId:
+          type: string
+
+    ErrorEnvelope:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              example: INVALID_CREDENTIALS
+            message:
+              type: string
+              example: Invalid username or password.
+            fields:
+              type: object
+              additionalProperties:
+                type: string
+            requestId:
+              type: string
+
+  responses:
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    UnauthorizedError:
+      description: Missing, expired, or invalid session
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    RateLimitError:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
