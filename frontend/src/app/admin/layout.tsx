@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { apiClient, ApiError } from "@/lib/api/client";
+import { apiClient } from "@/lib/api/client";
 import type { AdminUserDTO } from "@/lib/api/types";
 import {
   Shield,
@@ -14,6 +14,8 @@ import {
   Loader2,
   ExternalLink,
   UserCheck,
+  MessageSquare,
+  QrCode,
 } from "lucide-react";
 
 export default function AdminLayout({
@@ -47,7 +49,6 @@ export default function AdminLayout({
         }
       } catch (err) {
         if (isMounted) {
-          // If unauthorized, redirect to login
           router.replace("/admin/login");
         }
       }
@@ -97,6 +98,14 @@ export default function AdminLayout({
     return null;
   }
 
+  const navLinks = [
+    { href: "/admin", label: "Overview", icon: Shield },
+    { href: "/admin/products", label: "Products & Media", icon: Package },
+    { href: "/admin/orders", label: "Orders & Verification", icon: ShoppingBag },
+    { href: "/admin/settings/payment", label: "Payment QR & Bank", icon: QrCode },
+    { href: "/admin/whatsapp", label: "WhatsApp Logs", icon: MessageSquare },
+  ];
+
   return (
     <div className="min-h-screen bg-surface-muted text-ink flex flex-col md:flex-row antialiased">
       {/* Admin Sidebar Navigation */}
@@ -119,54 +128,28 @@ export default function AdminLayout({
 
           {/* Navigation Links */}
           <nav className="space-y-1.5 text-xs uppercase tracking-caps font-medium">
-            <Link
-              href="/admin"
-              className={`flex items-center space-x-3 px-3.5 py-2.5 rounded transition-colors ${
-                pathname === "/admin"
-                  ? "bg-white/10 text-gold"
-                  : "text-canvas/70 hover:text-canvas hover:bg-white/5"
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              <span>Overview</span>
-            </Link>
+            {navLinks.map((item) => {
+              const Icon = item.icon;
+              const isActive =
+                item.href === "/admin"
+                  ? pathname === "/admin"
+                  : pathname.startsWith(item.href);
 
-            <div className="pt-4 pb-2 px-3.5 text-[9px] uppercase tracking-[0.2em] text-canvas/40">
-              Future Milestones
-            </div>
-
-            <div
-              className="flex items-center justify-between px-3.5 py-2 text-canvas/40 cursor-not-allowed"
-              title="Available in Milestone 1/4"
-            >
-              <div className="flex items-center space-x-3">
-                <Package className="w-4 h-4" />
-                <span>Catalog &amp; Media</span>
-              </div>
-              <span className="text-[9px] border border-white/20 px-1 py-0.5">M1</span>
-            </div>
-
-            <div
-              className="flex items-center justify-between px-3.5 py-2 text-canvas/40 cursor-not-allowed"
-              title="Available in Milestone 1/6"
-            >
-              <div className="flex items-center space-x-3">
-                <ShoppingBag className="w-4 h-4" />
-                <span>Orders &amp; QR Bills</span>
-              </div>
-              <span className="text-[9px] border border-white/20 px-1 py-0.5">M6</span>
-            </div>
-
-            <div
-              className="flex items-center justify-between px-3.5 py-2 text-canvas/40 cursor-not-allowed"
-              title="Available in Milestone 6"
-            >
-              <div className="flex items-center space-x-3">
-                <Settings className="w-4 h-4" />
-                <span>Settings</span>
-              </div>
-              <span className="text-[9px] border border-white/20 px-1 py-0.5">M6</span>
-            </div>
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center space-x-3 px-3.5 py-2.5 rounded transition-colors ${
+                    isActive
+                      ? "bg-white/10 text-gold font-semibold"
+                      : "text-canvas/70 hover:text-canvas hover:bg-white/5"
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
           </nav>
         </div>
 
@@ -219,7 +202,7 @@ export default function AdminLayout({
         <header className="bg-surface border-b border-border h-16 px-6 md:px-10 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <span className="text-xs uppercase tracking-caps text-muted font-medium font-sans">
-              Operational Workspace &middot; Milestone 0 Foundation
+              Operational Workspace &middot; Milestone 1 Complete
             </span>
           </div>
 

@@ -2,13 +2,22 @@
 
 import Link from "next/link";
 import { Search, ShoppingBag, Shield } from "lucide-react";
+import { useCart } from "@/context/CartContext";
 
 export function SiteHeader() {
+  const { openCart, itemCount } = useCart();
+
   return (
     <header className="sticky top-0 z-40 bg-canvas/95 backdrop-blur-sm border-b border-border/80 transition-colors">
       <div className="max-w-[1440px] mx-auto px-6 md:px-12 h-20 flex items-center justify-between">
         {/* Navigation Categories */}
         <nav className="hidden md:flex items-center space-x-8 text-sm font-medium tracking-wide">
+          <Link
+            href="/collections/all"
+            className="text-ink hover:text-gold transition-colors duration-200"
+          >
+            All Works
+          </Link>
           <Link
             href="/collections/shirts"
             className="text-ink hover:text-gold transition-colors duration-200"
@@ -27,12 +36,6 @@ export function SiteHeader() {
           >
             Tailoring
           </Link>
-          <Link
-            href="/craft"
-            className="text-ink hover:text-gold transition-colors duration-200"
-          >
-            The Atelier
-          </Link>
         </nav>
 
         {/* Brand Mark */}
@@ -49,13 +52,13 @@ export function SiteHeader() {
 
         {/* Header Actions */}
         <div className="flex items-center space-x-5 text-ink">
-          <button
-            type="button"
-            aria-label="Search collection"
+          <Link
+            href="/collections/all"
+            aria-label="Search catalog"
             className="p-2 hover:text-gold transition-colors focus:outline-none focus:ring-1 focus:ring-focus rounded"
           >
             <Search className="w-4 h-4" />
-          </button>
+          </Link>
 
           <Link
             href="/admin"
@@ -68,11 +71,18 @@ export function SiteHeader() {
 
           <button
             type="button"
-            aria-label="View shopping bag"
+            onClick={openCart}
+            aria-label={`View shopping bag (${itemCount} items)`}
             className="p-2 hover:text-gold transition-colors relative focus:outline-none focus:ring-1 focus:ring-focus rounded"
           >
             <ShoppingBag className="w-4 h-4" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-gold rounded-full" />
+            {itemCount > 0 ? (
+              <span className="absolute -top-1 -right-1 bg-gold text-navy font-bold text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-sans">
+                {itemCount}
+              </span>
+            ) : (
+              <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-gold/70 rounded-full" />
+            )}
           </button>
         </div>
       </div>

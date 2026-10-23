@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { EB_Garamond, Hanken_Grotesk } from "next/font/google";
+import { CartProvider } from "@/context/CartContext";
+import { CartDrawer } from "@/components/cart/CartDrawer";
 import "./globals.css";
 
 const ebGaramond = EB_Garamond({
@@ -29,7 +31,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${ebGaramond.variable} ${hankenGrotesk.variable}`}>
       <body className="min-h-screen bg-canvas text-ink antialiased">
-        {children}
+        <CartProvider>
+          {children}
+          <CartDrawer />
+        </CartProvider>
       </body>
     </html>
   );
