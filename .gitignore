@@ -38,3 +38,4 @@ prisma/migrations/*_down.sql
 .idea/
 .vscode/
 Thumbs.db
+*.tsbuildinfo

@@ -20,6 +20,9 @@ import {
   ShoppingBag,
   Sparkles,
 } from "lucide-react";
+import { ProductMedia } from "@/components/media/ProductMedia";
+import { EditorialCropReveal } from "@/components/motion/EditorialCropReveal";
+import { ParallaxFrame } from "@/components/motion/ParallaxFrame";
 
 interface ProductPageProps {
   params: Promise<{ slug: string }>;
@@ -110,37 +113,26 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start pb-20 border-b border-border">
           {/* Left: Media Gallery Column (7 cols) */}
           <div className="lg:col-span-7 space-y-4">
-            {/* Primary Frame */}
-            <div className="relative aspect-[4/5] bg-surface-muted border border-border overflow-hidden flex items-center justify-center">
-              {product.imageUrl ? (
-                <img
-                  src={product.imageUrl}
-                  alt={product.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center p-12 text-center select-none space-y-3">
-                  <span className="font-display text-7xl text-muted/20 font-medium">
-                    {product.name.split(" ").map((w) => w[0]).join("")}
-                  </span>
-                  <span className="text-xs uppercase tracking-caps text-muted/60">
-                    {product.material}
-                  </span>
-                  {product.isFixture && (
-                    <span className="text-[10px] uppercase tracking-wider text-muted/60 border border-border px-2 py-0.5">
-                      Milestone 1 Fixture Record
+            {/* Primary Frame with EditorialCropReveal & ParallaxFrame */}
+            <EditorialCropReveal>
+              <ParallaxFrame speed={0.04}>
+                <div className="relative aspect-[4/5] bg-surface-muted border border-border overflow-hidden">
+                  <ProductMedia
+                    src={product.imageUrl}
+                    alt={product.name}
+                    priority={true}
+                    aspectRatio="aspect-[4/5]"
+                  />
+
+                  {/* Badge */}
+                  {product.badge && (
+                    <span className="absolute top-4 left-4 bg-navy text-canvas text-xs uppercase tracking-caps px-3 py-1 font-medium shadow-sm z-10">
+                      {product.badge}
                     </span>
                   )}
                 </div>
-              )}
-
-              {/* Badge */}
-              {product.badge && (
-                <span className="absolute top-4 left-4 bg-navy text-canvas text-xs uppercase tracking-caps px-3 py-1 font-medium shadow-sm">
-                  {product.badge}
-                </span>
-              )}
-            </div>
+              </ParallaxFrame>
+            </EditorialCropReveal>
 
             {/* Gallery Thumbnail Staging */}
             <div className="grid grid-cols-4 gap-3">

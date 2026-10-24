@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ProductViewModel } from "./product.types";
 import { CheckCircle2, AlertCircle } from "lucide-react";
+import { ProductMedia } from "@/components/media/ProductMedia";
 
 interface ProductCardProps {
   product: ProductViewModel;
@@ -16,38 +17,24 @@ export function formatINR(paise: number): string {
   }).format(rupees);
 }
 
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({ product, priority }: ProductCardProps) {
   return (
-    <article className="group flex flex-col bg-surface border border-border p-4 transition-all duration-300 hover:shadow-[0_8px_24px_-4px_rgba(10,25,47,0.06)]">
+    <article
+      data-grid-item
+      className="group flex flex-col bg-surface border border-border p-4 transition-all duration-300 hover:shadow-[0_8px_24px_-4px_rgba(10,25,47,0.06)]"
+    >
       {/* 4:5 Media Container */}
-      <div className="relative aspect-[4/5] bg-surface-muted overflow-hidden mb-4 flex items-center justify-center border border-border/50">
-        {product.imageUrl ? (
-          <img
-            src={product.imageUrl}
-            alt={product.imageAlt || product.name}
-            className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.025]"
-            loading="lazy"
-          />
-        ) : (
-          /* Subtle architectural monogram placeholder when no image */
-          <div className="flex flex-col items-center justify-center text-center p-6 space-y-2 select-none">
-            <span className="font-display text-4xl text-muted/30 font-medium tracking-tight">
-              {product.name.split(" ").map((w) => w[0]).join("")}
-            </span>
-            <span className="text-[10px] uppercase tracking-caps text-muted/60 font-sans">
-              {product.category}
-            </span>
-            {product.isFixture && (
-              <span className="mt-2 text-[9px] uppercase tracking-wider text-muted/50 border border-border px-1.5 py-0.5">
-                Fixture Draft
-              </span>
-            )}
-          </div>
-        )}
+      <div className="relative aspect-[4/5] bg-surface-muted overflow-hidden mb-4 border border-border/50">
+        <ProductMedia
+          src={product.imageUrl}
+          alt={product.imageAlt || product.name}
+          priority={priority}
+          aspectRatio="aspect-[4/5]"
+        />
 
         {/* Restrained Badge */}
         {product.badge && (
-          <span className="absolute top-3 left-3 bg-navy text-canvas text-[10px] uppercase tracking-caps px-2.5 py-1 font-medium shadow-sm">
+          <span className="absolute top-3 left-3 bg-navy text-canvas text-[10px] uppercase tracking-caps px-2.5 py-1 font-medium shadow-sm z-10">
             {product.badge}
           </span>
         )}

@@ -8,6 +8,8 @@ import { SiteFooter } from "@/components/layout/SiteFooter";
 import { ProductCard } from "@/components/product/ProductCard";
 import { MOCK_PRODUCTS, DetailedProduct } from "@/components/product/mockFixtures";
 import { SlidersHorizontal, ChevronRight, X, RotateCcw } from "lucide-react";
+import { SectionReveal } from "@/components/motion/SectionReveal";
+import { StaggeredGrid } from "@/components/motion/StaggeredGrid";
 
 interface CollectionPageProps {
   params: Promise<{ slug: string }>;
@@ -115,7 +117,7 @@ export default function CollectionPage({ params }: CollectionPageProps) {
         </nav>
 
         {/* 2. Editorial Masthead */}
-        <div className="pb-10 border-b border-border">
+        <SectionReveal className="pb-10 border-b border-border">
           <div className="max-w-2xl space-y-3">
             <span className="text-xs uppercase tracking-caps text-gold font-medium block">
               Curated Silhouette &middot; Autumn / Winter 2026
@@ -150,7 +152,7 @@ export default function CollectionPage({ params }: CollectionPageProps) {
               </button>
             ))}
           </div>
-        </div>
+        </SectionReveal>
 
         {/* 3. Product Toolbar (Sort & Filters) */}
         <div className="py-6 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -265,7 +267,7 @@ export default function CollectionPage({ params }: CollectionPageProps) {
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <StaggeredGrid className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {filteredProducts.map((product, idx) => (
                 <ProductCard
                   key={product.id}
@@ -273,7 +275,7 @@ export default function CollectionPage({ params }: CollectionPageProps) {
                   priority={idx < 4}
                 />
               ))}
-            </div>
+            </StaggeredGrid>
           )}
         </section>
       </main>

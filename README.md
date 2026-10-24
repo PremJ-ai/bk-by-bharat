@@ -144,3 +144,33 @@ npm run build --workspaces
 
 The API contract is canonically specified at [`contracts/openapi.yaml`](contracts/openapi.yaml).
 In production or local development, Next.js reverse-proxies `/api/v1/:path*` to the Express backend to enforce same-origin security and preserve `HttpOnly` cookie behavior.
+
+---
+
+## Motion & Media Architecture (Milestone 2)
+
+The animation and media presentation layer is built on GSAP 3 with `@gsap/react`, `ScrollTrigger`, and `ScrollSmoother`.
+
+### 1. Centralized GSAP Configuration
+- **File**: `frontend/src/lib/motion/gsap.ts`
+- **Safeguard**: Centralized, idempotent plugin registration runs exclusively on client mounts (`typeof window !== 'undefined'`), eliminating server-side rendering or Next.js hydration mismatches.
+- **Motion Tokens**: Durations (`fast: 0.22s`, `ui: 0.3s`, `reveal: 0.75s`, `editorial: 1.0s`) and eases (`power2.out`, `power3.out`) strictly match `design.md`.
+
+### 2. Route Eligibility for ScrollSmoother
+ScrollSmoother requires the `#smooth-wrapper` and `#smooth-content` container hierarchy. It is restricted to eligible storefront routes to prevent interference with forms, checkout flows, and operational tooling:
+- **Eligible Routes**: Storefront homepage (`/`), collection catalogs (`/collections/*`), product detail showcases (`/products/*`), and craft dossiers (`/craft`).
+- **Excluded Routes**: Admin portal (`/admin/*`), guest checkout submission (`/checkout`), order confirmation screens (`/orders/*`), and private status views (`/order-status/*`).
+- **Fixed Layer Isolation**: Viewport-fixed overlays—including `CartDrawer` (in RootLayout) and modal dialogs—are structured outside transformed content (`#smooth-content`), preventing browser coordinate clipping and stacking issues.
+
+### 3. Reusable Motion Components
+- `<SectionReveal>`: Scoped headline and section entrance (`top 82%`, `once: true`, `power3.out`).
+- `<StaggeredGrid>`: Scoped entrance targeting `[data-grid-item]` elements with controlled stagger (`0.06s`) as product cards scroll into view.
+- `<EditorialCropReveal>`: Smooth clip-path reveal for lifestyle and craft storytelling frames.
+- `<ParallaxFrame>`: Subtle vertical parallax travel (max 4-5%) guarded by `gsap.matchMedia("(min-width: 1024px)")` to run on desktop displays only.
+- `<ProductMedia>`: Adaptive image/video media presentation with play promise catch handling (`.play().catch(...)`), muted loop attributes, IntersectionObserver pause-on-offscreen, and accessible still poster fallback.
+
+### 4. Accessibility & Performance Guardrails
+- **`prefers-reduced-motion`**: When enabled at the OS or browser level, all GSAP entrance tweens, parallax calculations, and ScrollSmoother instances are bypassed. Content remains 100% visible and interactive with standard native scrolling.
+- **Touch Devices**: `smoothTouch: 0` is enforced to preserve native mobile touch momentum scrolling and responsive gesture handling.
+- **Cleanup**: React Strict Mode and Next.js route transitions invoke comprehensive teardown (`ScrollSmoother.get()?.kill()`, `ScrollTrigger.getAll().forEach(t => t.kill())`), preventing memory leaks, duplicate instances, and stale trigger bounding boxes.
+- **Interaction Protection**: No animations touch size chips, quantity buttons, form inputs, focus rings, or checkout submission controls.
