@@ -5,6 +5,7 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 export interface CartItem {
   id: string; // Composite unique key: `${productId}-${size}-${color || 'default'}`
   productId: string;
+  variantId?: string;
   name: string;
   slug: string;
   material: string;

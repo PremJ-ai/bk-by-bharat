@@ -1,8 +1,14 @@
 "use client";
 
-import { useState, use } from "react";
+import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { formatINR } from "@/components/product/ProductCard";
+import {
+  getAdminOrderById,
+  issueAdminInvoice,
+  verifyAdminPayment,
+  shipAdminOrder,
+} from "@/lib/api/commerce";
 import {
   ArrowLeft,
   MessageSquare,
@@ -15,6 +21,10 @@ import {
   ExternalLink,
   FileText,
   Clock,
+  Loader2,
+  RefreshCw,
+  Eye,
+  Check,
 } from "lucide-react";
 
 interface AdminOrderDetailPageProps {
@@ -25,73 +35,171 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
   const resolvedParams = use(params);
   const orderId = resolvedParams.id;
 
-  // Order Details State
-  const [status, setStatus] = useState<
-    "awaiting_admin_review" | "awaiting_customer_payment" | "payment_proof_received" | "paid" | "shipped"
-  >("payment_proof_received");
+  const [order, setOrder] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Invoice Builder State
-  const [shippingFee, setShippingFee] = useState<number>(0);
-  const [taxFee, setTaxFee] = useState<number>(0);
-  const [invoiceVersion, setInvoiceVersion] = useState<number>(1);
-  const [invoiceSentMessage, setInvoiceSentMessage] = useState<string | null>(null);
+  const [shippingRupees, setShippingRupees] = useState("0");
+  const [taxRupees, setTaxRupees] = useState("0");
+  const [discountRupees, setDiscountRupees] = useState("0");
+  const [isIssuingInvoice, setIsIssuingInvoice] = useState(false);
 
   // Payment Verification State
-  const [utrReference, setUtrReference] = useState("UPI-774920194821");
-  const [verifierName, setVerifierName] = useState("Bharat (Atelier Master)");
-  const [verifiedAmount, setVerifiedAmount] = useState("12400");
-  const [paymentFeedback, setPaymentFeedback] = useState<string | null>(null);
+  const [utrReference, setUtrReference] = useState("");
+  const [verifierNotes, setVerifierNotes] = useState("");
+  const [isVerifying, setIsVerifying] = useState(false);
 
   // Shipment State
-  const [courierName, setCourierName] = useState("Bluedart Apex Express");
-  const [trackingNumber, setTrackingNumber] = useState("BD-88492011IN");
-  const [trackingUrl, setTrackingUrl] = useState("https://bluedart.com/track/BD-88492011IN");
-  const [shipmentFeedback, setShipmentFeedback] = useState<string | null>(null);
+  const [carrier, setCarrier] = useState("Blue Dart Apex Express");
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [trackingUrl, setTrackingUrl] = useState("");
+  const [isShipping, setIsShipping] = useState(false);
 
-  const orderItems = [
-    {
-      id: "item-1",
-      name: "The High-Rise Gurkha Trouser",
-      material: "Irish Slub Linen (340gsm)",
-      size: "32",
-      quantity: 1,
-      pricePaise: 1240000,
-    },
-  ];
+  const loadOrderDetail = async () => {
+    try {
+      const data = await getAdminOrderById(orderId);
+      setOrder(data);
+      // Pre-fill invoice defaults
+      setShippingRupees(String(Math.round((data.shippingPaise || 0) / 100)));
+      setTaxRupees(String(Math.round((data.taxPaise || 0) / 100)));
+      setDiscountRupees(String(Math.round((data.discountPaise || 0) / 100)));
 
-  const subtotalPaise = orderItems.reduce((acc, item) => acc + item.pricePaise * item.quantity, 0);
-  const grandTotalPaise = subtotalPaise + shippingFee * 100 + taxFee * 100;
-
-  const handleSendPaymentRequest = () => {
-    setInvoiceVersion((prev) => prev + 1);
-    setStatus("awaiting_customer_payment");
-    setInvoiceSentMessage(
-      `Final Invoice v${invoiceVersion + 1} and Studio Payment QR sent to +91 98200 45678 over WhatsApp.`
-    );
-    setTimeout(() => setInvoiceSentMessage(null), 4000);
+      // Pre-fill latest proof UTR if available
+      const latestProof = data.paymentProofs?.[0];
+      if (latestProof?.transactionReference) {
+        setUtrReference(latestProof.transactionReference);
+      }
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err?.message || "Failed to load order." });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleVerifyPayment = (e: React.FormEvent) => {
+  useEffect(() => {
+    loadOrderDetail();
+  }, [orderId]);
+
+  const handleIssueInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!utrReference.trim()) return;
+    try {
+      setIsIssuingInvoice(true);
+      setFeedback(null);
 
-    setStatus("paid");
-    setPaymentFeedback(
-      `Payment verified! Transaction UTR ${utrReference} recorded by ${verifierName}. Order moved to tailoring / ready-to-ship.`
-    );
-    setTimeout(() => setPaymentFeedback(null), 4000);
+      const shippingPaise = (parseInt(shippingRupees, 10) || 0) * 100;
+      const taxPaise = (parseInt(taxRupees, 10) || 0) * 100;
+      const discountPaise = (parseInt(discountRupees, 10) || 0) * 100;
+
+      await issueAdminInvoice(orderId, {
+        shippingPaise,
+        taxPaise,
+        discountPaise,
+      });
+
+      setFeedback({
+        type: "success",
+        message: "Final verified invoice issued and stock reservation locked. Customer notified on WhatsApp.",
+      });
+      await loadOrderDetail();
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err?.message || "Failed to issue invoice." });
+    } finally {
+      setIsIssuingInvoice(false);
+    }
   };
 
-  const handleShipOrder = (e: React.FormEvent) => {
+  const handleVerifyPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!trackingNumber.trim()) return;
+    if (!utrReference.trim()) {
+      setFeedback({ type: "error", message: "UTR / Transaction reference is required to verify payment." });
+      return;
+    }
 
-    setStatus("shipped");
-    setShipmentFeedback(
-      `Order dispatched via ${courierName}! Tracking update sent to customer's WhatsApp.`
-    );
-    setTimeout(() => setShipmentFeedback(null), 4000);
+    try {
+      setIsVerifying(true);
+      setFeedback(null);
+
+      await verifyAdminPayment(orderId, {
+        utrReference: utrReference.trim(),
+        adminNotes: verifierNotes.trim() || undefined,
+      });
+
+      setFeedback({
+        type: "success",
+        message: "Payment verified against bank settlement ledger! Order marked PAID and inventory decremented.",
+      });
+      await loadOrderDetail();
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err?.message || "Payment verification failed." });
+    } finally {
+      setIsVerifying(false);
+    }
   };
+
+  const handleShipOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!carrier.trim() || !trackingNumber.trim()) {
+      setFeedback({ type: "error", message: "Carrier and tracking number are required." });
+      return;
+    }
+
+    try {
+      setIsShipping(true);
+      setFeedback(null);
+
+      await shipAdminOrder(orderId, {
+        carrier: carrier.trim(),
+        trackingNumber: trackingNumber.trim(),
+        trackingUrl: trackingUrl.trim() || undefined,
+      });
+
+      setFeedback({
+        type: "success",
+        message: "Shipment recorded and customer notified with tracking details on WhatsApp.",
+      });
+      await loadOrderDetail();
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err?.message || "Failed to dispatch shipment." });
+    } finally {
+      setIsShipping(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="py-24 text-center space-y-3">
+        <Loader2 className="w-8 h-8 animate-spin mx-auto text-navy" />
+        <p className="text-xs text-muted uppercase tracking-caps">Loading order manifest &amp; audit history...</p>
+      </div>
+    );
+  }
+
+  if (!order) {
+    return (
+      <div className="py-24 text-center space-y-3">
+        <AlertCircle className="w-8 h-8 text-crimson mx-auto" />
+        <p className="text-sm font-medium">Order not found.</p>
+        <Link href="/admin/orders" className="text-xs text-gold uppercase tracking-caps">
+          &larr; Back to Orders Queue
+        </Link>
+      </div>
+    );
+  }
+
+  const isAwaitingReview = order.status === "AWAITING_ADMIN_REVIEW";
+  const isAwaitingPayment = order.status === "AWAITING_CUSTOMER_PAYMENT";
+  const isProofReceived = order.status === "PAYMENT_PROOF_RECEIVED";
+  const isPaid = order.status === "PAID" || order.status === "PROCESSING";
+  const isShipped = order.status === "SHIPPED" || order.status === "DELIVERED";
+
+  const currentInvoice = order.invoices?.find((inv: any) => inv.isCurrent) || order.invoices?.[0];
+
+  const calcSubtotal = order.subtotalPaise;
+  const calcShipping = (parseInt(shippingRupees, 10) || 0) * 100;
+  const calcTax = (parseInt(taxRupees, 10) || 0) * 100;
+  const calcDiscount = (parseInt(discountRupees, 10) || 0) * 100;
+  const previewGrandTotal = Math.max(0, calcSubtotal + calcShipping + calcTax - calcDiscount);
 
   return (
     <div className="space-y-8">
@@ -100,298 +208,350 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
         <div className="flex items-center space-x-4">
           <Link
             href="/admin/orders"
-            className="p-2 border border-border hover:border-gold rounded text-muted hover:text-ink transition-colors"
-            title="Return to Orders Queue"
+            className="p-2 border border-border hover:border-gold hover:text-gold transition-colors text-muted"
           >
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div>
-            <div className="flex items-center space-x-3">
-              <span className="text-xs uppercase tracking-caps text-gold font-medium">
-                Order Reference: ORD-2026-8840
+            <div className="flex items-center space-x-2">
+              <span className="text-xs uppercase tracking-caps text-gold font-semibold font-mono">
+                {order.orderNumber}
               </span>
-              <span className="text-[10px] uppercase tracking-wider bg-navy text-canvas px-2 py-0.5 rounded font-mono">
-                ID: {orderId}
+              <span className="text-xs font-mono px-2 py-0.5 bg-surface border border-border">
+                {order.status}
               </span>
             </div>
-            <h1 className="font-display text-3xl text-ink font-normal">
-              Ananya Roy &middot; Manual QR Verification
+            <h1 className="font-display text-2xl text-ink font-normal mt-0.5">
+              Patron: {order.customerName}
             </h1>
           </div>
         </div>
 
-        {/* Current Status Badge */}
-        <div className="flex items-center space-x-2">
-          <span className="text-xs uppercase tracking-caps text-muted">Status:</span>
-          <span className="bg-navy text-gold px-3 py-1 text-xs uppercase tracking-caps font-semibold border border-gold/30">
-            {status.replace(/_/g, " ")}
-          </span>
-        </div>
+        <button
+          type="button"
+          onClick={loadOrderDetail}
+          className="inline-flex items-center space-x-2 bg-surface border border-border px-3.5 py-1.5 text-xs uppercase tracking-caps font-semibold text-ink hover:border-gold transition-colors"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span>Sync Order</span>
+        </button>
       </div>
 
-      {invoiceSentMessage && (
-        <div className="bg-navy text-canvas p-4 text-xs flex items-center space-x-2 border-l-4 border-gold shadow-md">
-          <Send className="w-4 h-4 text-gold flex-shrink-0" />
-          <span>{invoiceSentMessage}</span>
+      {feedback && (
+        <div
+          className={`p-3 text-xs flex items-center space-x-2 border ${
+            feedback.type === "success"
+              ? "bg-stock-ok/10 border-stock-ok/30 text-stock-ok"
+              : "bg-crimson/10 border-crimson/30 text-crimson"
+          }`}
+        >
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{feedback.message}</span>
         </div>
       )}
 
-      {paymentFeedback && (
-        <div className="bg-stock-ok/10 text-stock-ok border border-stock-ok p-4 text-xs flex items-center space-x-2 shadow-xs">
-          <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-          <span className="font-medium">{paymentFeedback}</span>
-        </div>
-      )}
-
-      {shipmentFeedback && (
-        <div className="bg-navy text-canvas border border-white/10 p-4 text-xs flex items-center space-x-2 shadow-xs">
-          <Truck className="w-4 h-4 text-gold flex-shrink-0" />
-          <span>{shipmentFeedback}</span>
-        </div>
-      )}
-
-      {/* Main Grid: Customer Snapshot & Items (7 cols) + Operations (5 cols) */}
+      {/* Main Grid: 7 cols left (manifest, invoice, proof) / 5 cols right (actions) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column: Customer Snapshot & Reserved Items (7 cols) */}
+        {/* Left Column (7 cols) */}
         <div className="lg:col-span-7 space-y-6">
-          {/* Customer & Delivery Snapshot */}
-          <div className="bg-surface border border-border p-6 space-y-4">
-            <h3 className="font-display text-lg text-ink font-medium border-b border-border pb-3">
-              1. Patron &amp; Delivery Snapshot
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-sans">
+          {/* Section 1: Customer & Delivery Details */}
+          <div className="bg-surface border border-border p-6 space-y-3">
+            <h2 className="text-xs uppercase tracking-caps text-muted font-semibold pb-2 border-b border-border">
+              Patron Contact &amp; Shipping Destination
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div>
-                <span className="text-muted uppercase tracking-caps block mb-1">Patron Full Name</span>
-                <span className="font-medium text-ink text-sm">Ananya Roy</span>
+                <span className="text-muted block text-[11px]">WhatsApp &middot; Phone</span>
+                <span className="font-mono font-semibold text-ink">{order.whatsappNumber}</span>
+                {order.email && <span className="block text-muted">{order.email}</span>}
               </div>
-
               <div>
-                <span className="text-muted uppercase tracking-caps block mb-1">WhatsApp Mobile</span>
-                <span className="font-mono text-ink text-sm">+91 98200 45678</span>
-              </div>
-
-              <div className="sm:col-span-2 pt-2 border-t border-border/60">
-                <span className="text-muted uppercase tracking-caps block mb-1">Delivery Destination</span>
-                <p className="text-ink text-sm leading-relaxed">
-                  Apartment 4B, Silver Oak Manor, Malabar Hill, Mumbai, Maharashtra 400006
+                <span className="text-muted block text-[11px]">Delivery Address</span>
+                <p className="text-ink leading-relaxed">
+                  {order.addressLine1}
+                  {order.addressLine2 && `, ${order.addressLine2}`}
+                  <br />
+                  {order.city}, {order.stateRegion} {order.postalCode}
                 </p>
-                <p className="text-muted text-[11px] mt-1 italic">
-                  Note: "Please hem inseam to 29.5 inches if possible."
-                </p>
-              </div>
-
-              <div className="sm:col-span-2 pt-2 border-t border-border/60 flex items-center justify-between text-[11px] text-muted">
-                <span className="flex items-center space-x-1.5 text-stock-ok font-medium">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>Transactional WhatsApp Consent Verified</span>
-                </span>
-                <span className="font-mono">Timestamp: 2026-10-23 16:15 UTC</span>
               </div>
             </div>
           </div>
 
-          {/* Reserved Items */}
+          {/* Section 2: Manifest Items */}
           <div className="bg-surface border border-border p-6 space-y-4">
-            <h3 className="font-display text-lg text-ink font-medium border-b border-border pb-3">
-              2. Reserved Atelier Garments
-            </h3>
-
-            <div className="divide-y divide-border/60 text-xs font-sans">
-              {orderItems.map((item) => (
-                <div key={item.id} className="py-3 first:pt-0 last:pb-0 flex justify-between items-center">
+            <h2 className="text-xs uppercase tracking-caps text-muted font-semibold pb-2 border-b border-border">
+              Ordered Garments &amp; Inventory Snapshots
+            </h2>
+            <div className="divide-y divide-border/60">
+              {order.items.map((item: any) => (
+                <div key={item.id} className="py-3 first:pt-0 last:pb-0 flex justify-between items-center text-xs">
                   <div>
-                    <h5 className="font-medium text-ink text-sm">{item.name}</h5>
-                    <p className="text-muted text-[11px]">{item.material}</p>
-                    <span className="text-[11px] text-muted">Size: {item.size} &middot; Qty: {item.quantity}</span>
+                    <h4 className="font-medium text-ink text-sm">{item.productName}</h4>
+                    <p className="text-muted text-[11px] mt-0.5 font-mono">
+                      SKU: {item.sku} &middot; Size {item.size} &middot; Qty: {item.quantity}
+                    </p>
                   </div>
-                  <span className="font-semibold text-ink text-sm tabular-nums">
-                    {formatINR(item.pricePaise * item.quantity)}
+                  <span className="font-mono font-semibold text-ink tabular-nums text-sm">
+                    {formatINR(item.lineTotalPaise)}
                   </span>
                 </div>
               ))}
             </div>
+
+            <div className="pt-3 border-t border-border flex justify-between text-xs font-semibold">
+              <span>Items Subtotal</span>
+              <span className="font-mono tabular-nums">{formatINR(order.subtotalPaise)}</span>
+            </div>
           </div>
 
-          {/* Versioned Final Invoice Builder */}
+          {/* Section 3: Uploaded Payment Proofs (if any) */}
           <div className="bg-surface border border-border p-6 space-y-4">
-            <div className="border-b border-border pb-3 flex justify-between items-center">
-              <div>
-                <h3 className="font-display text-lg text-ink font-medium">
-                  3. Versioned Itemized Invoice (v{invoiceVersion})
-                </h3>
-                <p className="text-[11px] text-muted font-sans">
-                  Billing rule: Known charges must be itemized before payment QR is requested.
-                </p>
-              </div>
-              <span className="text-[10px] font-mono uppercase tracking-wider text-muted border border-border px-2 py-0.5">
-                Currency: INR
+            <h2 className="text-xs uppercase tracking-caps text-muted font-semibold pb-2 border-b border-border flex items-center justify-between">
+              <span>Customer Payment Proofs &amp; Bank UTR</span>
+              <span className="text-[10px] text-muted">
+                {order.paymentProofs?.length || 0} proof(s) submitted
               </span>
-            </div>
+            </h2>
 
-            <div className="space-y-3 text-xs font-sans">
-              <div className="flex justify-between py-1">
-                <span className="text-muted">Garments Subtotal:</span>
-                <span className="font-medium text-ink tabular-nums">{formatINR(subtotalPaise)}</span>
+            {order.paymentProofs?.length === 0 ? (
+              <p className="text-xs text-muted py-2">No payment screenshots submitted by patron yet.</p>
+            ) : (
+              <div className="space-y-4">
+                {order.paymentProofs.map((p: any) => (
+                  <div key={p.id} className="p-3 bg-canvas border border-border space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono font-semibold text-ink">
+                        UTR: {p.transactionReference || "Unspecified by patron"}
+                      </span>
+                      <span
+                        className={`text-[10px] uppercase font-semibold px-2 py-0.5 rounded ${
+                          p.status === "VERIFIED"
+                            ? "bg-stock-ok/10 text-stock-ok"
+                            : "bg-rust/10 text-rust"
+                        }`}
+                      >
+                        {p.status}
+                      </span>
+                    </div>
+
+                    {p.url && (
+                      <div className="pt-2">
+                        <a
+                          href={p.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center space-x-2 text-gold hover:underline text-xs"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>View Full-Size Receipt Image</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-
-              <div className="flex items-center justify-between py-1">
-                <span className="text-muted">Courier &amp; Insured Transit:</span>
-                <div className="flex items-center space-x-1">
-                  <span className="text-muted">₹</span>
-                  <input
-                    type="number"
-                    value={shippingFee}
-                    onChange={(e) => setShippingFee(parseInt(e.target.value, 10) || 0)}
-                    className="w-20 bg-canvas border border-border px-2 py-1 text-right text-xs font-semibold tabular-nums"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between py-1">
-                <span className="text-muted">Disclosed Taxes &amp; Packaging:</span>
-                <div className="flex items-center space-x-1">
-                  <span className="text-muted">₹</span>
-                  <input
-                    type="number"
-                    value={taxFee}
-                    onChange={(e) => setTaxFee(parseInt(e.target.value, 10) || 0)}
-                    className="w-20 bg-canvas border border-border px-2 py-1 text-right text-xs font-semibold tabular-nums"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-between py-2 border-t border-border text-sm font-semibold text-ink">
-                <span>Final Payable Bill:</span>
-                <span className="text-base tabular-nums">{formatINR(grandTotalPaise)}</span>
-              </div>
-            </div>
-
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={handleSendPaymentRequest}
-                className="w-full bg-navy hover:bg-gold hover:text-navy text-canvas py-3 px-4 text-xs uppercase tracking-caps font-semibold flex items-center justify-center space-x-2 transition-colors rounded shadow-xs"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>Send Final Bill &amp; Payment QR via WhatsApp</span>
-              </button>
-            </div>
+            )}
           </div>
         </div>
 
-        {/* Right Column: Payment Verification & Dispatch Workflow (5 cols) */}
+        {/* Right Column: Workflow Action Panels (5 cols) */}
         <div className="lg:col-span-5 space-y-6">
-          {/* Section 4: Customer Screenshot & Verification */}
+          {/* Action 1: Verified Invoice Builder */}
           <div className="bg-surface border border-border p-6 space-y-4">
-            <div className="border-b border-border pb-3 flex justify-between items-center">
-              <h3 className="font-display text-lg text-ink font-medium">
-                4. Payment Proof Review
-              </h3>
-              <span className="text-[10px] uppercase tracking-caps bg-rust/10 text-rust border border-rust/30 px-2 py-0.5 rounded font-medium">
-                Receipt Received
-              </span>
-            </div>
-
-            {/* Inbound Screenshot Affordance */}
-            <div className="border border-border bg-surface-muted p-4 space-y-3">
-              <div className="aspect-[4/3] bg-canvas border border-border/80 flex flex-col items-center justify-center text-center p-6 space-y-2 select-none">
-                <FileText className="w-8 h-8 text-gold" />
-                <span className="text-xs font-mono font-medium text-ink">
-                  INBOUND_PAYMENT_PROOF_8840.PNG
-                </span>
-                <span className="text-[10px] text-muted font-sans">
-                  Received via WhatsApp webhook &middot; 2.4 MB
-                </span>
-              </div>
-
-              {/* Strict Non-negotiable Security Caution */}
-              <div className="bg-rust/10 border-l-2 border-rust p-3 text-[11px] text-rust leading-relaxed font-sans flex items-start space-x-2">
-                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <span>
-                  <strong>Strict Policy:</strong> A screenshot alone is never authoritative proof of payment. Independently verify the actual bank or UPI statement before marking as paid.
-                </span>
-              </div>
-            </div>
-
-            {/* Bank Reconciliation Form */}
-            <form onSubmit={handleVerifyPayment} className="space-y-3 pt-2 text-xs font-sans">
+            <div className="border-b border-border pb-3 flex items-center justify-between">
               <div>
-                <label className="block uppercase tracking-caps text-muted font-medium mb-1">
-                  Bank / UPI Transaction Reference (UTR) *
+                <span className="text-[10px] uppercase tracking-caps text-gold font-semibold">
+                  Step 01
+                </span>
+                <h3 className="font-display text-lg text-ink font-normal">
+                  Issue Verified Invoice
+                </h3>
+              </div>
+              {currentInvoice && (
+                <span className="text-[10px] font-mono text-muted bg-surface-muted px-2 py-0.5 border border-border">
+                  {currentInvoice.invoiceNumber}
+                </span>
+              )}
+            </div>
+
+            <form onSubmit={handleIssueInvoice} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] uppercase tracking-caps text-muted block mb-1">
+                    Shipping (INR)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={shippingRupees}
+                    onChange={(e) => setShippingRupees(e.target.value)}
+                    className="w-full bg-canvas border border-border p-2 text-xs text-ink font-mono focus:border-gold focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] uppercase tracking-caps text-muted block mb-1">
+                    GST / Tax (INR)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={taxRupees}
+                    onChange={(e) => setTaxRupees(e.target.value)}
+                    className="w-full bg-canvas border border-border p-2 text-xs text-ink font-mono focus:border-gold focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] uppercase tracking-caps text-muted block mb-1">
+                  Courtesy Discount (INR)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={discountRupees}
+                  onChange={(e) => setDiscountRupees(e.target.value)}
+                  className="w-full bg-canvas border border-border p-2 text-xs text-ink font-mono focus:border-gold focus:outline-none"
+                />
+              </div>
+
+              <div className="p-3 bg-surface-muted border border-border flex justify-between items-center text-xs">
+                <span className="font-semibold text-ink">Final Payable:</span>
+                <span className="font-mono text-sm font-bold text-ink">
+                  {formatINR(previewGrandTotal)}
+                </span>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isIssuingInvoice || isPaid || isShipped}
+                className="w-full bg-navy hover:bg-gold hover:text-navy text-canvas py-2.5 text-xs uppercase tracking-caps font-semibold flex items-center justify-center space-x-2 transition-colors disabled:opacity-50"
+              >
+                {isIssuingInvoice ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Send className="w-3.5 h-3.5" />
+                )}
+                <span>Issue Invoice &amp; Lock Stock Hold</span>
+              </button>
+            </form>
+          </div>
+
+          {/* Action 2: Bank Ledger Payment Verification */}
+          <div className="bg-surface border border-border p-6 space-y-4">
+            <div className="border-b border-border pb-3">
+              <span className="text-[10px] uppercase tracking-caps text-gold font-semibold">
+                Step 02
+              </span>
+              <h3 className="font-display text-lg text-ink font-normal">
+                Verify Payment in Bank Ledger
+              </h3>
+            </div>
+
+            <form onSubmit={handleVerifyPayment} className="space-y-3">
+              <div>
+                <label className="text-[11px] uppercase tracking-caps text-muted block mb-1">
+                  Bank Settlement UTR *
                 </label>
                 <input
                   type="text"
-                  required
                   value={utrReference}
                   onChange={(e) => setUtrReference(e.target.value)}
-                  placeholder="e.g. UPI-20261023884192"
-                  className="w-full bg-canvas border border-border px-3 py-2 text-xs font-mono text-ink focus:border-gold focus:outline-none"
+                  placeholder="e.g. HDFC000192841920"
+                  className="w-full bg-canvas border border-border p-2 text-xs text-ink font-mono focus:border-gold focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block uppercase tracking-caps text-muted font-medium mb-1">
-                  Verifying Admin Staff *
+                <label className="text-[11px] uppercase tracking-caps text-muted block mb-1">
+                  Verification Remarks
                 </label>
                 <input
                   type="text"
-                  required
-                  value={verifierName}
-                  onChange={(e) => setVerifierName(e.target.value)}
-                  className="w-full bg-canvas border border-border px-3 py-2 text-xs text-ink focus:border-gold focus:outline-none"
+                  value={verifierNotes}
+                  onChange={(e) => setVerifierNotes(e.target.value)}
+                  placeholder="e.g. Confirmed in current account statement"
+                  className="w-full bg-canvas border border-border p-2 text-xs text-ink focus:border-gold focus:outline-none"
                 />
               </div>
 
               <button
                 type="submit"
-                disabled={status === "paid" || status === "shipped"}
-                className="w-full bg-stock-ok hover:bg-stock-ok/90 text-white py-2.5 px-4 text-xs uppercase tracking-caps font-semibold flex items-center justify-center space-x-2 transition-colors disabled:opacity-50"
+                disabled={isVerifying || isPaid}
+                className="w-full bg-stock-ok hover:bg-stock-ok/90 text-white py-2.5 text-xs uppercase tracking-caps font-semibold flex items-center justify-center space-x-2 transition-colors disabled:opacity-50"
               >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>{status === "paid" || status === "shipped" ? "Payment Already Verified" : "Verify Payment & Mark Paid"}</span>
+                {isVerifying ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <ShieldCheck className="w-4 h-4" />
+                )}
+                <span>{isPaid ? "Payment Already Verified" : "Confirm Settlement & Mark Paid"}</span>
               </button>
             </form>
           </div>
 
-          {/* Section 5: Shipment & Tracking */}
+          {/* Action 3: Courier Dispatch */}
           <div className="bg-surface border border-border p-6 space-y-4">
-            <h3 className="font-display text-lg text-ink font-medium border-b border-border pb-3">
-              5. Dispatch &amp; Tracking
-            </h3>
+            <div className="border-b border-border pb-3">
+              <span className="text-[10px] uppercase tracking-caps text-gold font-semibold">
+                Step 03
+              </span>
+              <h3 className="font-display text-lg text-ink font-normal">
+                Dispatch Shipment &amp; Notify Patron
+              </h3>
+            </div>
 
-            <form onSubmit={handleShipOrder} className="space-y-3 text-xs font-sans">
+            <form onSubmit={handleShipOrder} className="space-y-3">
               <div>
-                <label className="block uppercase tracking-caps text-muted font-medium mb-1">
-                  Courier Carrier
+                <label className="text-[11px] uppercase tracking-caps text-muted block mb-1">
+                  Courier Carrier *
                 </label>
                 <input
                   type="text"
-                  value={courierName}
-                  onChange={(e) => setCourierName(e.target.value)}
-                  className="w-full bg-canvas border border-border px-3 py-2 text-xs text-ink focus:border-gold focus:outline-none"
+                  value={carrier}
+                  onChange={(e) => setCarrier(e.target.value)}
+                  className="w-full bg-canvas border border-border p-2 text-xs text-ink focus:border-gold focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block uppercase tracking-caps text-muted font-medium mb-1">
-                  Tracking Waybill Number
+                <label className="text-[11px] uppercase tracking-caps text-muted block mb-1">
+                  Tracking / AWB Number *
                 </label>
                 <input
                   type="text"
                   value={trackingNumber}
                   onChange={(e) => setTrackingNumber(e.target.value)}
-                  className="w-full bg-canvas border border-border px-3 py-2 text-xs font-mono text-ink focus:border-gold focus:outline-none"
+                  placeholder="e.g. BD-99482910IN"
+                  className="w-full bg-canvas border border-border p-2 text-xs text-ink font-mono focus:border-gold focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] uppercase tracking-caps text-muted block mb-1">
+                  Tracking Web Link
+                </label>
+                <input
+                  type="url"
+                  value={trackingUrl}
+                  onChange={(e) => setTrackingUrl(e.target.value)}
+                  placeholder="https://bluedart.com/track/..."
+                  className="w-full bg-canvas border border-border p-2 text-xs text-ink font-mono focus:border-gold focus:outline-none"
                 />
               </div>
 
               <button
                 type="submit"
-                disabled={status !== "paid"}
-                className="w-full bg-navy hover:bg-gold hover:text-navy text-canvas py-2.5 px-4 text-xs uppercase tracking-caps font-semibold flex items-center justify-center space-x-2 transition-colors disabled:opacity-50"
+                disabled={isShipping || !isPaid}
+                className="w-full bg-navy hover:bg-gold hover:text-navy text-canvas py-2.5 text-xs uppercase tracking-caps font-semibold flex items-center justify-center space-x-2 transition-colors disabled:opacity-50"
               >
-                <Truck className="w-3.5 h-3.5" />
-                <span>Dispatch &amp; Send WhatsApp Tracking</span>
+                {isShipping ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Truck className="w-3.5 h-3.5" />
+                )}
+                <span>Dispatch &amp; Send WhatsApp Alert</span>
               </button>
             </form>
           </div>

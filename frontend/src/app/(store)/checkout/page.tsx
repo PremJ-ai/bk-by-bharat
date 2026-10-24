@@ -8,6 +8,8 @@ import { formatINR } from "@/components/product/ProductCard";
 import { AnnouncementBar } from "@/components/layout/AnnouncementBar";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
+import { submitGuestCheckout } from "@/lib/api/commerce";
+import { getStorefrontProductBySlug } from "@/lib/api/catalog";
 import {
   ShieldCheck,
   ShoppingBag,
@@ -25,7 +27,7 @@ export default function GuestCheckoutPage() {
 
   // Form Fields
   const [fullName, setFullName] = useState("");
-  const [whatsappNumber, setWhatsappNumber] = useState("+91 ");
+  const [whatsappNumber, setWhatsappNumber] = useState("+91");
   const [email, setEmail] = useState("");
   const [addressLine1, setAddressLine1] = useState("");
   const [addressLine2, setAddressLine2] = useState("");
@@ -60,54 +62,43 @@ export default function GuestCheckoutPage() {
     setLoading(true);
 
     try {
-      // Generate a high-entropy guest access token and order number for Milestone 1 preview
-      const highEntropyToken = "tok_" + Math.random().toString(36).substring(2) + Date.now().toString(36);
-      const orderNumber = `ORD-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+      // Clean and normalize WhatsApp phone
+      const cleanPhone = whatsappNumber.replace(/[\s-]/g, "");
 
-      const orderSnapshot = {
-        orderNumber,
-        token: highEntropyToken,
+      // Resolve variant IDs for cart items
+      const checkoutItems = await Promise.all(
+        items.map(async (item) => {
+          if (item.variantId) {
+            return { variantId: item.variantId, quantity: item.quantity };
+          }
+          const prod = await getStorefrontProductBySlug(item.slug);
+          const found = prod.sizes.find((s) => s.size === item.size);
+          if (!found?.id) {
+            throw new Error(`Variant for "${item.name}" (Size ${item.size}) is not available.`);
+          }
+          return { variantId: found.id, quantity: item.quantity };
+        })
+      );
+
+      const res = await submitGuestCheckout({
         customerName: fullName.trim(),
-        whatsappNumber: whatsappNumber.trim(),
+        whatsappNumber: cleanPhone,
         email: email.trim() || undefined,
-        shippingAddress: {
-          line1: addressLine1.trim(),
-          line2: addressLine2.trim() || undefined,
-          city: city.trim(),
-          state: stateRegion.trim(),
-          postalCode: postalCode.trim(),
-          notes: deliveryNotes.trim() || undefined,
-        },
-        consent: {
-          given: true,
-          timestamp: new Date().toISOString(),
-          version: "v1_transactional_whatsapp",
-        },
-        items: items.map((i) => ({
-          name: i.name,
-          material: i.material,
-          size: i.size,
-          color: i.color,
-          quantity: i.quantity,
-          pricePaise: i.pricePaise,
-        })),
-        subtotalPaise,
-        status: "awaiting_admin_review",
-        createdAt: new Date().toISOString(),
-      };
-
-      // Store in localStorage for guest retrieval
-      try {
-        localStorage.setItem(`order_${highEntropyToken}`, JSON.stringify(orderSnapshot));
-      } catch {
-        // Storage write best effort
-      }
+        addressLine1: addressLine1.trim(),
+        addressLine2: addressLine2.trim() || undefined,
+        city: city.trim(),
+        stateRegion: stateRegion.trim(),
+        postalCode: postalCode.trim(),
+        deliveryNotes: deliveryNotes.trim() || undefined,
+        whatsappConsent: true,
+        items: checkoutItems,
+      });
 
       // Clear the shopping bag
       clearCart();
 
-      // Redirect to private confirmation screen
-      router.push(`/orders/confirmation/${highEntropyToken}`);
+      // Redirect to private confirmation screen with real guest token
+      router.push(`/orders/confirmation/${res.guestStatusToken}`);
     } catch {
       setErrorMessage("An unexpected error occurred while placing your order. Please try again.");
     } finally {

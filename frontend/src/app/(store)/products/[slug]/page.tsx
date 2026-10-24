@@ -97,6 +97,7 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
 
     addItem({
       productId: product.id,
+      variantId: selectedSizeObj?.id,
       name: product.name,
       slug: product.slug,
       material: product.material,
