@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { adminAuthRouter } from "../modules/admin-auth/admin-auth.routes.js";
 import { publicCatalogRouter, adminCatalogRouter } from "../modules/catalog/catalog.routes.js";
+import { adminMediaRouter } from "../modules/media/media.routes.js";
 import { checkDatabaseConnection } from "../db/prisma.js";
 
 export const v1Router = Router();
@@ -40,3 +41,6 @@ v1Router.use("/", publicCatalogRouter);
 
 // Admin catalog management endpoints (/api/v1/admin/products)
 v1Router.use("/admin/products", adminCatalogRouter);
+
+// Admin media asset endpoints (/api/v1/admin/media)
+v1Router.use("/admin/media", adminMediaRouter);

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ProductCard } from "@/components/product/ProductCard";
 import type { ProductViewModel } from "@/components/product/product.types";
 import { createAdminProduct } from "@/lib/api/catalog";
+import { generateAiMedia, uploadMediaAsset } from "@/lib/api/media";
 import {
   ArrowLeft,
   Sparkles,
@@ -21,6 +22,7 @@ import {
 
 export default function NewProductPage() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Product Form State
   const [name, setName] = useState("Artisan Gurkha Pant");
@@ -37,6 +39,7 @@ export default function NewProductPage() {
 
   // AI Media Workflow State
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(
     "https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?auto=format&fit=crop&w=1200&q=85"
   );
@@ -56,15 +59,56 @@ export default function NewProductPage() {
   };
 
   // AI Image generation trigger
-  const handleGenerateAI = () => {
-    setIsGenerating(true);
-    setTimeout(() => {
-      setIsGenerating(false);
-      setGeneratedImage(
-        "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?auto=format&fit=crop&w=800&q=80"
-      );
+  const handleGenerateAI = async () => {
+    try {
+      setIsGenerating(true);
+      setFeedback(null);
+      const asset = await generateAiMedia({
+        productName: name || "Bespoke Garment",
+        material: material || "Pure Linen",
+        categoryName: category,
+      });
+      setGeneratedImage(asset.url);
       setImageApproved(false);
-    }, 1500);
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err?.message || "Failed to generate AI visual." });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Direct file upload handler
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+      setFeedback(null);
+
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const base64 = reader.result as string;
+          const asset = await uploadMediaAsset({
+            fileName: file.name,
+            mimeType: file.type || "image/jpeg",
+            fileBase64: base64,
+            altText: `${name} - ${file.name}`,
+          });
+          setGeneratedImage(asset.url);
+          setImageApproved(true);
+        } catch (uploadErr: any) {
+          setFeedback({ type: "error", message: uploadErr?.message || "Upload failed." });
+        } finally {
+          setIsUploading(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err?.message || "File reading failed." });
+      setIsUploading(false);
+    }
   };
 
   const pricePaise = (parseInt(priceRupees, 10) || 0) * 100;
@@ -437,6 +481,28 @@ export default function NewProductPage() {
                   )}
                 </button>
 
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/avif"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="border border-border hover:border-gold px-4 py-2 text-xs uppercase tracking-caps font-medium text-ink flex items-center space-x-2 transition-colors disabled:opacity-50"
+                >
+                  {isUploading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="w-3.5 h-3.5 text-muted" />
+                  )}
+                  <span>{isUploading ? "Uploading..." : "Upload File"}</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -448,7 +514,6 @@ export default function NewProductPage() {
                   }}
                   className="border border-border hover:border-gold px-4 py-2 text-xs uppercase tracking-caps font-medium text-ink flex items-center space-x-2 transition-colors"
                 >
-                  <Upload className="w-3.5 h-3.5 text-muted" />
                   <span>Set Image URL</span>
                 </button>
               </div>

@@ -283,6 +283,8 @@ async function main() {
       where: { slug: item.slug },
     });
 
+    let productId: string;
+
     if (existing) {
       console.log(`- Product '${item.slug}' already exists; updating.`);
       await prisma.product.update({
@@ -301,32 +303,44 @@ async function main() {
           careInstructions: item.careInstructions,
         },
       });
-      continue;
+      productId = existing.id;
+    } else {
+      const product = await prisma.product.create({
+        data: {
+          name: item.name,
+          slug: item.slug,
+          categoryId: item.categoryId,
+          material: item.material,
+          pricePaise: item.pricePaise,
+          compareAtPricePaise: item.compareAtPricePaise,
+          badge: item.badge,
+          status: "PUBLISHED",
+          publishedAt: new Date(),
+          description: item.description,
+          longDescription: item.longDescription,
+          details: item.details,
+          careInstructions: item.careInstructions,
+          isFixture: false,
+        },
+      });
+      productId = product.id;
     }
 
-    const product = await prisma.product.create({
-      data: {
-        name: item.name,
-        slug: item.slug,
-        categoryId: item.categoryId,
-        material: item.material,
-        pricePaise: item.pricePaise,
-        compareAtPricePaise: item.compareAtPricePaise,
-        badge: item.badge,
-        status: "PUBLISHED",
-        publishedAt: new Date(),
-        description: item.description,
-        longDescription: item.longDescription,
-        details: item.details,
-        careInstructions: item.careInstructions,
-        isFixture: false,
+    // Clean any existing variants with these SKUs across all products
+    const skus = item.variants.map((v) => v.sku);
+    await prisma.productVariant.deleteMany({
+      where: {
+        OR: [
+          { productId },
+          { sku: { in: skus } },
+        ],
       },
     });
 
     // Variants
     await prisma.productVariant.createMany({
       data: item.variants.map((v) => ({
-        productId: product.id,
+        productId,
         sku: v.sku,
         size: v.size,
         colorName: v.colorName,
@@ -335,10 +349,15 @@ async function main() {
       })),
     });
 
+    // Clean existing media links for this product
+    await prisma.productMedia.deleteMany({
+      where: { productId },
+    });
+
     // Media
     for (let i = 0; i < item.media.length; i++) {
       const m = item.media[i];
-      const storageKey = `seed/${product.id}/asset-${i + 1}.webp`;
+      const storageKey = `seed/${productId}/asset-${i + 1}.webp`;
       const asset = await prisma.mediaAsset.upsert({
         where: { storageKey },
         update: { url: m.url, altText: m.altText },
@@ -354,9 +373,9 @@ async function main() {
 
       await prisma.productMedia.create({
         data: {
-          productId: product.id,
+          productId,
           mediaAssetId: asset.id,
-          isPrimary: m.isPrimary,
+          isPrimary: m.isPrimary ?? i === 0,
           sortOrder: i,
         },
       });

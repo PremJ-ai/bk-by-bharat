@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ProductCard } from "@/components/product/ProductCard";
@@ -11,6 +11,7 @@ import {
   publishAdminProduct,
   unpublishAdminProduct,
 } from "@/lib/api/catalog";
+import { generateAiMedia, uploadMediaAsset } from "@/lib/api/media";
 import {
   ArrowLeft,
   Sparkles,
@@ -32,9 +33,12 @@ export default function EditProductPage({ params }: EditProductPageProps) {
   const resolvedParams = use(params);
   const productId = resolvedParams.id;
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Product Form State
@@ -97,6 +101,57 @@ export default function EditProductPage({ params }: EditProductPageProps) {
     badge,
     imageUrl: imageUrl || undefined,
     isFixture: false,
+  };
+
+  const handleGenerateAI = async () => {
+    try {
+      setIsGenerating(true);
+      setFeedback(null);
+      const asset = await generateAiMedia({
+        productName: name || "Garment",
+        material: material || "Fabric",
+        categoryName: category,
+        productId,
+      });
+      setImageUrl(asset.url);
+      setFeedback({ type: "success", message: "AI Lookbook asset generated and staged!" });
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err?.message || "Generation failed." });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+      setFeedback(null);
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const base64 = reader.result as string;
+          const asset = await uploadMediaAsset({
+            fileName: file.name,
+            mimeType: file.type || "image/jpeg",
+            fileBase64: base64,
+            altText: `${name} - ${file.name}`,
+          });
+          setImageUrl(asset.url);
+          setFeedback({ type: "success", message: "Media asset uploaded successfully!" });
+        } catch (uploadErr: any) {
+          setFeedback({ type: "error", message: uploadErr?.message || "Upload failed." });
+        } finally {
+          setIsUploading(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err?.message || "File reading failed." });
+      setIsUploading(false);
+    }
   };
 
   const handleSave = async (publish?: boolean) => {
@@ -353,7 +408,7 @@ export default function EditProductPage({ params }: EditProductPageProps) {
               />
             </div>
 
-            <div className="space-y-1">
+            <div className="space-y-2">
               <label className="text-xs uppercase tracking-caps text-muted font-medium block">
                 Primary Image URL
               </label>
@@ -363,6 +418,44 @@ export default function EditProductPage({ params }: EditProductPageProps) {
                 onChange={(e) => setImageUrl(e.target.value)}
                 className="w-full bg-canvas border border-border p-2.5 text-xs text-ink font-mono focus:border-gold focus:outline-none"
               />
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/avif"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+
+                <button
+                  type="button"
+                  onClick={handleGenerateAI}
+                  disabled={isGenerating}
+                  className="bg-navy text-canvas hover:bg-gold hover:text-navy px-3 py-1.5 text-xs uppercase tracking-caps font-semibold flex items-center space-x-1.5 transition-colors disabled:opacity-50"
+                >
+                  {isGenerating ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                  <span>{isGenerating ? "Synthesizing..." : "Generate AI Visual"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="border border-border hover:border-gold px-3 py-1.5 text-xs uppercase tracking-caps font-medium text-ink flex items-center space-x-1.5 transition-colors disabled:opacity-50"
+                >
+                  {isUploading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="w-3.5 h-3.5 text-muted" />
+                  )}
+                  <span>{isUploading ? "Uploading..." : "Upload File"}</span>
+                </button>
+              </div>
             </div>
 
             {/* Inventory table */}

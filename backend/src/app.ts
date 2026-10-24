@@ -1,4 +1,5 @@
 import express, { type Application } from "express";
+import path from "node:path";
 import helmet from "helmet";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -54,6 +55,9 @@ export function createApp(): Application {
       res.status(503).json({ status: "unavailable", database: "disconnected", timestamp: new Date().toISOString() });
     }
   });
+
+  // Static files for uploaded/generated assets
+  app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 
   // API v1 routes with rate limiting
   app.use("/api/v1", apiRateLimiter, v1Router);

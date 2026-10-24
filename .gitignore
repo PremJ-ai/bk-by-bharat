@@ -37,5 +37,8 @@ prisma/migrations/*_down.sql
 *.sw?
 .idea/
 .vscode/
-Thumbs.db
 *.tsbuildinfo
+
+# Uploaded assets
+backend/uploads/*
+!backend/uploads/.gitkeep
