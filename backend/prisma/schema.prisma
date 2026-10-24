@@ -7,6 +7,10 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// -----------------------------------------------------------------------------
+// Authentication & Audit
+// -----------------------------------------------------------------------------
+
 enum AdminRole {
   ADMIN
   SUPPORT
@@ -64,4 +68,421 @@ model AuditEvent {
   @@index([action])
   @@index([resourceType, resourceId])
   @@map("audit_events")
+}
+
+// -----------------------------------------------------------------------------
+// Catalog: Categories, Collections, Products & Variants
+// -----------------------------------------------------------------------------
+
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model Category {
+  id           String    @id @default(uuid())
+  name         String
+  slug         String    @unique
+  description  String?
+  displayOrder Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  products     Product[]
+
+  @@map("categories")
+}
+
+model Collection {
+  id           String              @id @default(uuid())
+  name         String
+  slug         String              @unique
+  description  String?
+  season       String?
+  displayOrder Int                 @default(0)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  items        CollectionProduct[]
+
+  @@map("collections")
+}
+
+model CollectionProduct {
+  id           String     @id @default(uuid())
+  collectionId String
+  productId    String
+  displayOrder Int        @default(0)
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, productId])
+  @@map("collection_products")
+}
+
+model Product {
+  id                  String              @id @default(uuid())
+  name                String
+  slug                String              @unique
+  description         String
+  longDescription     String?
+  material            String
+  badge               String?
+  status              ProductStatus       @default(DRAFT)
+  pricePaise          Int                 // Base price in integer minor units (paise)
+  compareAtPricePaise Int?
+  currency            String              @default("INR")
+  categoryId          String
+  category            Category            @relation(fields: [categoryId], references: [id])
+  details             String[]            // Architectural tailoring bullet points
+  careInstructions    String[]
+  isFixture           Boolean             @default(false)
+  publishedAt         DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  variants            ProductVariant[]
+  media               ProductMedia[]
+  collections         CollectionProduct[]
+
+  @@index([status])
+  @@index([slug])
+  @@index([categoryId])
+  @@map("products")
+}
+
+model ProductVariant {
+  id                 String   @id @default(uuid())
+  productId          String
+  product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku                String   @unique
+  size               String   // S, M, L, XL, etc.
+  colorName          String
+  colorHex           String?
+  stock              Int      @default(0)
+  reservedStock      Int      @default(0)
+  priceOverridePaise Int?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([productId])
+  @@index([sku])
+  @@map("product_variants")
+}
+
+// -----------------------------------------------------------------------------
+// Media & AI Generation
+// -----------------------------------------------------------------------------
+
+enum MediaSource {
+  AI_GENERATED
+  UPLOADED
+  EXTERNAL_MIGRATED
+}
+
+enum MediaStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+model MediaAsset {
+  id            String         @id @default(uuid())
+  source        MediaSource    @default(UPLOADED)
+  status        MediaStatus    @default(READY)
+  storageKey    String         @unique
+  url           String
+  altText       String
+  mimeType      String
+  fileSizeBytes Int
+  width         Int?
+  height        Int?
+  prompt        String?
+  provenance    String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  productMedia  ProductMedia[]
+
+  @@map("media_assets")
+}
+
+model ProductMedia {
+  id           String     @id @default(uuid())
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  mediaAssetId String
+  mediaAsset   MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  isPrimary    Boolean    @default(false)
+  sortOrder    Int        @default(0)
+  createdAt    DateTime   @default(now())
+
+  @@index([productId])
+  @@map("product_media")
+}
+
+enum GenerationJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model ImageGenerationJob {
+  id             String              @id @default(uuid())
+  productId      String?
+  status         GenerationJobStatus @default(PENDING)
+  prompt         String
+  aspectRatio    String              @default("4:5")
+  idempotencyKey String              @unique
+  provider       String              @default("local_atelier")
+  providerJobId  String?
+  mediaAssetId   String?
+  errorMessage   String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@map("image_generation_jobs")
+}
+
+// -----------------------------------------------------------------------------
+// Store Settings & QR Payment Configuration
+// -----------------------------------------------------------------------------
+
+model StoreSettings {
+  id                  String   @id @default("default")
+  upiId               String   @default("atelier@bharat.upi")
+  payeeName           String   @default("Bharat Atelier New Delhi")
+  paymentInstructions String   @default("Scan QR using any UPI app (GPay, PhonePe, Paytm). Confirm order reference in remarks.")
+  qrImageUrl          String?
+  qrStorageKey        String?
+  whatsappNumber      String   @default("+919876543210")
+  invoicePrefix       String   @default("INV-2026-")
+  shippingDefaultPaise Int     @default(0)
+  updatedAt           DateTime @updatedAt
+
+  @@map("store_settings")
+}
+
+// -----------------------------------------------------------------------------
+// Orders, Guest Checkout & Invoicing
+// -----------------------------------------------------------------------------
+
+enum OrderStatus {
+  AWAITING_ADMIN_REVIEW
+  AWAITING_CUSTOMER_PAYMENT
+  PAYMENT_PROOF_RECEIVED
+  PAYMENT_UNDER_REVIEW
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLATION_REQUESTED
+  CANCELLED
+  REFUND_REQUESTED
+  REFUND_PROCESSING
+  PARTIALLY_REFUNDED
+  REFUNDED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  NOT_REQUESTED
+  REQUESTED
+  PROOF_RECEIVED
+  UNDER_REVIEW
+  VERIFIED
+  REJECTED
+  EXPIRED
+  REFUNDED
+}
+
+enum FulfillmentStatus {
+  UNFULFILLED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  RETURNED
+}
+
+model Order {
+  id                   String                @id @default(uuid())
+  orderNumber          String                @unique
+  status               OrderStatus           @default(AWAITING_ADMIN_REVIEW)
+  paymentStatus        PaymentStatus         @default(NOT_REQUESTED)
+  fulfillmentStatus    FulfillmentStatus     @default(UNFULFILLED)
+  customerName         String
+  whatsappNumber       String
+  email                String?
+  addressLine1         String
+  addressLine2         String?
+  city                 String
+  stateRegion          String
+  postalCode           String
+  country              String                @default("India")
+  deliveryNotes        String?
+  whatsappConsent      Boolean               @default(true)
+  whatsappConsentAt    DateTime              @default(now())
+  guestTokenHash       String                @unique
+  subtotalPaise        Int
+  discountPaise        Int                   @default(0)
+  shippingPaise        Int                   @default(0)
+  taxPaise             Int                   @default(0)
+  totalPaise           Int
+  currency             String                @default("INR")
+  paymentHoldExpiresAt DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  items                OrderItem[]
+  invoices             Invoice[]
+  paymentProofs        PaymentProof[]
+  shipments            Shipment[]
+  cancellationRequests CancellationRequest[]
+  whatsappMessages     WhatsAppMessage[]
+
+  @@index([status])
+  @@index([whatsappNumber])
+  @@index([guestTokenHash])
+  @@map("orders")
+}
+
+model OrderItem {
+  id             String   @id @default(uuid())
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId      String?
+  variantId      String?
+  productName    String
+  sku            String
+  size           String
+  color          String
+  material       String
+  unitPricePaise Int
+  quantity       Int
+  lineTotalPaise Int
+  imageUrl       String?
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model Invoice {
+  id               String   @id @default(uuid())
+  orderId          String
+  order            Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  version          Int      @default(1)
+  invoiceNumber    String   @unique
+  subtotalPaise    Int
+  discountPaise    Int      @default(0)
+  shippingPaise    Int      @default(0)
+  otherFeePaise    Int      @default(0)
+  otherFeeLabel    String?
+  taxPaise         Int      @default(0)
+  totalPaise       Int
+  currency         String   @default("INR")
+  isCurrent        Boolean  @default(true)
+  createdByAdminId String?
+  createdAt        DateTime @default(now())
+
+  @@index([orderId])
+  @@map("invoices")
+}
+
+enum ProofReviewStatus {
+  PENDING_REVIEW
+  VERIFIED
+  REJECTED
+}
+
+model PaymentProof {
+  id                   String            @id @default(uuid())
+  orderId              String
+  order                Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  storageKey           String
+  url                  String
+  mimeType             String
+  fileSizeBytes        Int
+  status               ProofReviewStatus @default(PENDING_REVIEW)
+  transactionReference String?           // Bank / UPI UTR reference
+  verifiedByAdminId    String?
+  verifiedAt           DateTime?
+  adminNotes           String?
+  receivedAt           DateTime          @default(now())
+
+  @@index([orderId])
+  @@map("payment_proofs")
+}
+
+model Shipment {
+  id             String    @id @default(uuid())
+  orderId        String
+  order          Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  carrier        String
+  trackingNumber String
+  trackingUrl    String?
+  shippedAt      DateTime  @default(now())
+  deliveredAt    DateTime?
+  notes          String?
+
+  @@index([orderId])
+  @@map("shipments")
+}
+
+enum RequestSource {
+  WEBSITE
+  WHATSAPP
+  ADMIN
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model CancellationRequest {
+  id                String        @id @default(uuid())
+  orderId           String
+  order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  source            RequestSource @default(WEBSITE)
+  reason            String
+  status            RequestStatus @default(PENDING)
+  decidedByAdminId  String?
+  decidedAt         DateTime?
+  refundReference   String?
+  refundAmountPaise Int?
+  createdAt         DateTime      @default(now())
+
+  @@index([orderId])
+  @@map("cancellation_requests")
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+model WhatsAppMessage {
+  id                String           @id @default(uuid())
+  orderId           String?
+  order             Order?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  providerMessageId String?          @unique
+  direction         MessageDirection
+  recipientPhone    String
+  templateName      String?
+  bodyText          String
+  status            MessageStatus    @default(QUEUED)
+  errorMessage      String?
+  createdAt         DateTime         @default(now())
+
+  @@index([orderId])
+  @@index([recipientPhone])
+  @@map("whatsapp_messages")
 }

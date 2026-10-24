@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, use } from "react";
+import { useState, use, useEffect } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AnnouncementBar } from "@/components/layout/AnnouncementBar";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { getProductBySlug } from "@/components/product/mockFixtures";
+import { getStorefrontProductBySlug, type DetailedProductModel } from "@/lib/api/catalog";
 import { formatINR } from "@/components/product/ProductCard";
 import { useCart } from "@/context/CartContext";
 import {
@@ -19,6 +20,7 @@ import {
   ChevronDown,
   ShoppingBag,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 import { ProductMedia } from "@/components/media/ProductMedia";
 import { EditorialCropReveal } from "@/components/motion/EditorialCropReveal";
@@ -30,26 +32,64 @@ interface ProductPageProps {
 
 export default function ProductDetailPage({ params }: ProductPageProps) {
   const resolvedParams = use(params);
-  const product = getProductBySlug(resolvedParams.slug);
+  const initialFixture = getProductBySlug(resolvedParams.slug);
 
-  if (!product) {
-    notFound();
-  }
+  const [product, setProduct] = useState<DetailedProductModel | null>(initialFixture as any || null);
+  const [loading, setLoading] = useState<boolean>(!initialFixture);
 
   const { addItem } = useCart();
 
   // State
   const [selectedSize, setSelectedSize] = useState<string>(
-    product.sizes.find((s) => s.available)?.size || ""
+    initialFixture?.sizes.find((s) => s.available)?.size || ""
   );
   const [selectedColor, setSelectedColor] = useState<string>(
-    product.colors[0]?.name || "Standard"
+    initialFixture?.colors[0]?.name || "Standard"
   );
   const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
   const [openAccordion, setOpenAccordion] = useState<string | null>("details");
   const [addedAnimation, setAddedAnimation] = useState<boolean>(false);
 
-  const selectedSizeObj = product.sizes.find((s) => s.size === selectedSize);
+  useEffect(() => {
+    let cancelled = false;
+
+    getStorefrontProductBySlug(resolvedParams.slug)
+      .then((data) => {
+        if (!cancelled && data) {
+          setProduct(data);
+          setLoading(false);
+          setSelectedSize((prev) => prev || data.sizes?.find((s) => s.available)?.size || data.sizes?.[0]?.size || "");
+          setSelectedColor((prev) => prev || data.colors?.[0]?.name || "Standard");
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.warn("Backend product detail fetch fallback:", err?.message);
+          if (!initialFixture) {
+            notFound();
+          }
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedParams.slug, initialFixture]);
+
+  if (loading && !product) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-canvas">
+        <Loader2 className="w-8 h-8 animate-spin text-navy" />
+      </div>
+    );
+  }
+
+  if (!product) {
+    notFound();
+  }
+
+  const selectedSizeObj = product.sizes?.find((s) => s.size === selectedSize);
   const isAvailable = selectedSizeObj?.available ?? false;
 
   const handleAddToCart = () => {

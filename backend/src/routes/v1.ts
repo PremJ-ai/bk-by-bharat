@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { adminAuthRouter } from "../modules/admin-auth/admin-auth.routes.js";
+import { publicCatalogRouter, adminCatalogRouter } from "../modules/catalog/catalog.routes.js";
 import { checkDatabaseConnection } from "../db/prisma.js";
 
 export const v1Router = Router();
@@ -33,3 +34,9 @@ v1Router.get("/health/ready", async (_req, res) => {
 
 // Admin authentication endpoints
 v1Router.use("/admin-auth", adminAuthRouter);
+
+// Public storefront catalog endpoints (/api/v1/products, /api/v1/categories)
+v1Router.use("/", publicCatalogRouter);
+
+// Admin catalog management endpoints (/api/v1/admin/products)
+v1Router.use("/admin/products", adminCatalogRouter);

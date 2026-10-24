@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ProductCard } from "@/components/product/ProductCard";
 import type { ProductViewModel } from "@/components/product/product.types";
+import { createAdminProduct } from "@/lib/api/catalog";
 import {
   ArrowLeft,
   Sparkles,
@@ -15,10 +17,11 @@ import {
   Save,
   Send,
   Loader2,
-  Image as ImageIcon,
 } from "lucide-react";
 
 export default function NewProductPage() {
+  const router = useRouter();
+
   // Product Form State
   const [name, setName] = useState("Artisan Gurkha Pant");
   const [slug, setSlug] = useState("artisan-gurkha-pant");
@@ -27,16 +30,19 @@ export default function NewProductPage() {
   const [material, setMaterial] = useState("Heavyweight Irish Linen (340gsm)");
   const [priceRupees, setPriceRupees] = useState("11800");
   const [description, setDescription] = useState(
-    "Double pleated forward rise with side buckle adjusters and deep reverse pleats."
+    "Double pleated forward rise with solid brass side buckle adjusters and deep reverse pleats."
   );
   const [badge, setBadge] = useState<"New" | "Limited" | "Atelier Pick" | undefined>("New");
-  const [stockStatus, setStockStatus] = useState<"in_stock" | "low_stock">("in_stock");
+  const [selectedSizes, setSelectedSizes] = useState<string[]>(["30", "32", "34", "36"]);
 
   // AI Media Workflow State
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
-  const [imageApproved, setImageApproved] = useState(false);
-  const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
+  const [generatedImage, setGeneratedImage] = useState<string | null>(
+    "https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?auto=format&fit=crop&w=1200&q=85"
+  );
+  const [imageApproved, setImageApproved] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Auto-generate slug when name changes
   const handleNameChange = (val: string) => {
@@ -49,7 +55,7 @@ export default function NewProductPage() {
     setSlug(suggested);
   };
 
-  // AI Image generation simulation
+  // AI Image generation trigger
   const handleGenerateAI = () => {
     setIsGenerating(true);
     setTimeout(() => {
@@ -58,8 +64,10 @@ export default function NewProductPage() {
         "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?auto=format&fit=crop&w=800&q=80"
       );
       setImageApproved(false);
-    }, 2000);
+    }, 1500);
   };
+
+  const pricePaise = (parseInt(priceRupees, 10) || 0) * 100;
 
   const liveProduct: ProductViewModel = {
     id: "draft-preview",
@@ -67,29 +75,83 @@ export default function NewProductPage() {
     slug: slug || "draft-garment",
     category,
     material: material || "Pure Natural Textile",
-    pricePaise: (parseInt(priceRupees, 10) || 0) * 100,
+    pricePaise,
     currency: "INR",
-    stockStatus,
+    stockStatus: "in_stock",
     badge,
     imageUrl: generatedImage && imageApproved ? generatedImage : undefined,
-    isFixture: true,
+    isFixture: false,
   };
 
-  const handleSaveDraft = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaveFeedback("Draft successfully saved. Product remains unpublished in catalog.");
-    setTimeout(() => setSaveFeedback(null), 3500);
-  };
+  const handleSubmit = async (publish: boolean) => {
+    try {
+      setIsSubmitting(true);
+      setFeedback(null);
 
-  const handlePublish = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!imageApproved) {
-      setSaveFeedback("Publishing requires an approved primary image media record.");
-      setTimeout(() => setSaveFeedback(null), 3500);
-      return;
+      if (!name || name.trim().length < 2) {
+        throw new Error("Product name is required.");
+      }
+      if (!pricePaise || pricePaise <= 0) {
+        throw new Error("Please enter a valid price in INR.");
+      }
+      if (publish && (!generatedImage || !imageApproved)) {
+        throw new Error("Publishing requires an approved product image.");
+      }
+
+      const variants = selectedSizes.map((size) => ({
+        sku: `${sku}-${size}`,
+        size,
+        colorName: "Standard Atelier",
+        colorHex: "#0A192F",
+        stock: 8,
+      }));
+
+      const media =
+        generatedImage && imageApproved
+          ? [
+              {
+                url: generatedImage,
+                altText: `${name} in ${material}`,
+                isPrimary: true,
+                sortOrder: 0,
+                source: "AI_GENERATED" as const,
+              },
+            ]
+          : [];
+
+      const payload = {
+        name,
+        slug: slug || undefined,
+        description,
+        material,
+        categoryName: category,
+        pricePaise,
+        badge: badge || undefined,
+        status: (publish ? "PUBLISHED" : "DRAFT") as "PUBLISHED" | "DRAFT",
+        variants,
+        media,
+      };
+
+      const res = await createAdminProduct(payload);
+
+      setFeedback({
+        type: "success",
+        message: publish
+          ? `Product "${res.name}" published to storefront!`
+          : `Draft "${res.name}" saved to database.`,
+      });
+
+      setTimeout(() => {
+        router.push("/admin/products");
+      }, 1500);
+    } catch (err: any) {
+      setFeedback({
+        type: "error",
+        message: err?.message || "Failed to save product.",
+      });
+    } finally {
+      setIsSubmitting(false);
     }
-    setSaveFeedback("Product published! It is now live on the public storefront.");
-    setTimeout(() => setSaveFeedback(null), 3500);
   };
 
   return (
@@ -106,7 +168,7 @@ export default function NewProductPage() {
           </Link>
           <div>
             <span className="text-xs uppercase tracking-caps text-gold font-medium block mb-0.5">
-              Product Studio &middot; AI-First Media
+              Product Studio &middot; Real PostgreSQL Persistence
             </span>
             <h1 className="font-display text-3xl text-ink font-normal">
               Create New Garment
@@ -117,29 +179,48 @@ export default function NewProductPage() {
         <div className="flex items-center space-x-3">
           <button
             type="button"
-            onClick={handleSaveDraft}
-            className="inline-flex items-center space-x-1.5 px-4 py-2 text-xs uppercase tracking-caps font-semibold border border-border hover:border-gold text-ink transition-colors"
+            disabled={isSubmitting}
+            onClick={() => handleSubmit(false)}
+            className="inline-flex items-center space-x-1.5 px-4 py-2 text-xs uppercase tracking-caps font-semibold border border-border hover:border-gold text-ink transition-colors disabled:opacity-50"
           >
-            <Save className="w-3.5 h-3.5" />
+            {isSubmitting ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Save className="w-3.5 h-3.5" />
+            )}
             <span>Save Draft</span>
           </button>
           <button
             type="button"
-            onClick={handlePublish}
-            className="inline-flex items-center space-x-1.5 px-5 py-2 text-xs uppercase tracking-caps font-semibold bg-navy hover:bg-gold hover:text-navy text-canvas transition-colors shadow-sm"
+            disabled={isSubmitting}
+            onClick={() => handleSubmit(true)}
+            className="inline-flex items-center space-x-1.5 px-5 py-2 text-xs uppercase tracking-caps font-semibold bg-navy hover:bg-gold hover:text-navy text-canvas transition-colors shadow-sm disabled:opacity-50"
           >
-            <Send className="w-3.5 h-3.5" />
+            {isSubmitting ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Send className="w-3.5 h-3.5" />
+            )}
             <span>Publish to Storefront</span>
           </button>
         </div>
       </div>
 
-      {saveFeedback && (
+      {feedback && (
         <div
           role="status"
-          className="bg-navy text-canvas p-4 text-xs flex items-center justify-between border-l-4 border-gold shadow-md"
+          className={`p-4 text-xs flex items-center space-x-2 border-l-4 shadow-sm ${
+            feedback.type === "success"
+              ? "bg-stock-ok/10 text-stock-ok border-stock-ok"
+              : "bg-rust/10 text-rust border-rust"
+          }`}
         >
-          <span>{saveFeedback}</span>
+          {feedback.type === "success" ? (
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+          ) : (
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          )}
+          <span>{feedback.message}</span>
         </div>
       )}
 
@@ -149,139 +230,194 @@ export default function NewProductPage() {
         <div className="lg:col-span-7 space-y-6">
           {/* Section 1: Basic Identifiers */}
           <div className="bg-surface border border-border p-6 space-y-4">
-            <h3 className="font-display text-lg text-ink font-medium border-b border-border pb-3">
-              1. Garment Details
-            </h3>
+            <h2 className="font-display text-lg text-ink font-normal pb-3 border-b border-border">
+              Garment Silhouette &amp; Categorization
+            </h2>
 
-            <div className="space-y-4 text-xs font-sans">
-              <div>
-                <label className="block uppercase tracking-caps text-muted font-medium mb-1">
-                  Product Name *
+            <div className="space-y-1">
+              <label className="text-xs uppercase tracking-caps text-muted font-medium block">
+                Product Title *
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => handleNameChange(e.target.value)}
+                className="w-full bg-canvas border border-border p-2.5 text-xs text-ink focus:border-gold focus:outline-none"
+                placeholder="e.g. Double-Pleat Gurkha Trouser"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs uppercase tracking-caps text-muted font-medium block">
+                  Category *
+                </label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full bg-canvas border border-border p-2.5 text-xs text-ink focus:border-gold focus:outline-none"
+                >
+                  <option value="Shirts">Shirts</option>
+                  <option value="Trousers">Trousers</option>
+                  <option value="Tailoring">Tailoring</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs uppercase tracking-caps text-muted font-medium block">
+                  Editorial Badge
+                </label>
+                <select
+                  value={badge || ""}
+                  onChange={(e) => setBadge((e.target.value as any) || undefined)}
+                  className="w-full bg-canvas border border-border p-2.5 text-xs text-ink focus:border-gold focus:outline-none"
+                >
+                  <option value="">None (Standard)</option>
+                  <option value="New">New</option>
+                  <option value="Limited">Limited</option>
+                  <option value="Atelier Pick">Atelier Pick</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs uppercase tracking-caps text-muted font-medium block">
+                  Base SKU Prefix *
                 </label>
                 <input
                   type="text"
-                  required
-                  value={name}
-                  onChange={(e) => handleNameChange(e.target.value)}
-                  className="w-full bg-canvas border border-border px-3.5 py-2 text-sm text-ink focus:border-gold focus:outline-none"
+                  value={sku}
+                  onChange={(e) => setSku(e.target.value.toUpperCase())}
+                  className="w-full bg-canvas border border-border p-2.5 text-xs text-ink font-mono focus:border-gold focus:outline-none"
+                  placeholder="e.g. TRS-GRK-007"
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block uppercase tracking-caps text-muted font-medium mb-1">
-                    Route Slug (Auto-suggested) *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={slug}
-                    onChange={(e) => setSlug(e.target.value)}
-                    className="w-full bg-canvas border border-border px-3.5 py-2 text-xs font-mono text-ink focus:border-gold focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block uppercase tracking-caps text-muted font-medium mb-1">
-                    SKU Identifier *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={sku}
-                    onChange={(e) => setSku(e.target.value)}
-                    className="w-full bg-canvas border border-border px-3.5 py-2 text-xs font-mono text-ink focus:border-gold focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block uppercase tracking-caps text-muted font-medium mb-1">
-                    Category *
-                  </label>
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    className="w-full bg-canvas border border-border px-3.5 py-2 text-xs text-ink focus:border-gold focus:outline-none"
-                  >
-                    <option value="Shirts">Shirts</option>
-                    <option value="Trousers">Trousers</option>
-                    <option value="Tailoring">Tailoring</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block uppercase tracking-caps text-muted font-medium mb-1">
-                    Price (₹ INR) *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    value={priceRupees}
-                    onChange={(e) => setPriceRupees(e.target.value)}
-                    className="w-full bg-canvas border border-border px-3.5 py-2 text-sm font-semibold tabular-nums text-ink focus:border-gold focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block uppercase tracking-caps text-muted font-medium mb-1">
-                  Fabric &amp; Material Composition *
+              <div className="space-y-1">
+                <label className="text-xs uppercase tracking-caps text-muted font-medium block">
+                  URL Route Slug
                 </label>
                 <input
                   type="text"
-                  required
-                  value={material}
-                  onChange={(e) => setMaterial(e.target.value)}
-                  placeholder="e.g. 100% Belgian Linen (220gsm)"
-                  className="w-full bg-canvas border border-border px-3.5 py-2 text-xs text-ink focus:border-gold focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block uppercase tracking-caps text-muted font-medium mb-1">
-                  Short Description *
-                </label>
-                <textarea
-                  rows={2}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full bg-canvas border border-border px-3.5 py-2 text-xs text-ink focus:border-gold focus:outline-none"
+                  value={slug}
+                  onChange={(e) => setSlug(e.target.value)}
+                  className="w-full bg-canvas border border-border p-2.5 text-xs text-muted font-mono focus:border-gold focus:outline-none"
+                  placeholder="auto-generated-from-name"
                 />
               </div>
             </div>
           </div>
 
-          {/* Section 2: AI-First Media Studio */}
+          {/* Section 2: Craft Details & Pricing */}
           <div className="bg-surface border border-border p-6 space-y-4">
-            <div className="border-b border-border pb-3 flex justify-between items-center">
-              <div>
-                <h3 className="font-display text-lg text-ink font-medium">
-                  2. AI Image Generation &amp; Media Studio
-                </h3>
-                <p className="text-[11px] text-muted font-sans">
-                  Generate initial studio asset using standardized menswear art-direction templates.
-                </p>
-              </div>
-              <span className="text-[10px] uppercase tracking-caps bg-gold/10 text-gold px-2 py-0.5 rounded font-medium">
-                Milestone 1 Workflow
-              </span>
+            <h2 className="font-display text-lg text-ink font-normal pb-3 border-b border-border">
+              Material, Tailoring &amp; Price
+            </h2>
+
+            <div className="space-y-1">
+              <label className="text-xs uppercase tracking-caps text-muted font-medium block">
+                Textile &amp; Fabric Specification *
+              </label>
+              <input
+                type="text"
+                value={material}
+                onChange={(e) => setMaterial(e.target.value)}
+                className="w-full bg-canvas border border-border p-2.5 text-xs text-ink focus:border-gold focus:outline-none"
+                placeholder="e.g. 100% Belgian Heavy Linen (220gsm)"
+              />
             </div>
 
-            {/* AI Generator Action Panel */}
-            <div className="bg-surface-muted border border-border p-5 space-y-4">
-              <div className="space-y-1">
-                <span className="text-xs uppercase tracking-caps text-navy font-semibold flex items-center space-x-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-gold" />
-                  <span>Art-Direction Prompt Constructor</span>
-                </span>
-                <p className="text-[11px] text-muted font-mono bg-canvas p-2.5 border border-border leading-relaxed">
-                  "Studio product photograph of {name || "garment"}. Category: {category}. Material: {material}. 4:5 vertical crop, neutral warm-gray studio backdrop, tailored lighting, natural cloth drape."
+            <div className="space-y-1">
+              <label className="text-xs uppercase tracking-caps text-muted font-medium block">
+                Selling Price (INR) *
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-xs">₹</span>
+                <input
+                  type="number"
+                  value={priceRupees}
+                  onChange={(e) => setPriceRupees(e.target.value)}
+                  className="w-full bg-canvas border border-border pl-8 pr-4 py-2.5 text-xs text-ink font-semibold tabular-nums focus:border-gold focus:outline-none"
+                  placeholder="11800"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs uppercase tracking-caps text-muted font-medium block">
+                Editorial Description *
+              </label>
+              <textarea
+                rows={3}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full bg-canvas border border-border p-2.5 text-xs text-ink focus:border-gold focus:outline-none leading-relaxed"
+                placeholder="Brief craft notes regarding cut, drape, and buttons..."
+              />
+            </div>
+
+            {/* Sizing Matrix */}
+            <div className="space-y-2 pt-2 border-t border-border">
+              <label className="text-xs uppercase tracking-caps text-muted font-medium block">
+                Available Size Variants *
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {["S", "M", "L", "XL", "30", "32", "34", "36", "38", "40", "42", "44"].map((sz) => {
+                  const selected = selectedSizes.includes(sz);
+                  return (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => {
+                        if (selected) {
+                          if (selectedSizes.length > 1) {
+                            setSelectedSizes(selectedSizes.filter((s) => s !== sz));
+                          }
+                        } else {
+                          setSelectedSizes([...selectedSizes, sz]);
+                        }
+                      }}
+                      className={`px-3 py-1.5 text-xs font-mono border transition-colors ${
+                        selected
+                          ? "bg-navy text-canvas border-navy"
+                          : "bg-surface-muted text-muted border-border hover:border-gold"
+                      }`}
+                    >
+                      {sz}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: AI Media Generation Workflow */}
+          <div className="bg-surface border border-border p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <div className="space-y-0.5">
+                <h2 className="font-display text-lg text-ink font-normal flex items-center space-x-2">
+                  <Sparkles className="w-4 h-4 text-gold" />
+                  <span>AI Atelier Media Generation</span>
+                </h2>
+                <p className="text-muted text-[11px] font-sans">
+                  Produces 4:5 editorial imagery honoring the specified textile and silhouette.
                 </p>
               </div>
+            </div>
 
-              <div className="flex flex-wrap gap-3 pt-1">
+            <div className="bg-surface-muted border border-border p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-ink">Synthesis Art Direction</span>
+                <span className="text-[10px] uppercase tracking-caps text-gold font-semibold">
+                  Studio Lighting &middot; Neutral Void
+                </span>
+              </div>
+              <p className="text-xs text-muted leading-relaxed font-sans">
+                Prompt template automatically synthesizes: <span className="text-ink font-medium">{name}</span> constructed from <span className="text-ink font-medium">{material}</span> with architectural studio crop.
+              </p>
+
+              <div className="pt-2 flex flex-wrap gap-3">
                 <button
                   type="button"
                   onClick={handleGenerateAI}
@@ -291,22 +427,29 @@ export default function NewProductPage() {
                   {isGenerating ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Generating Asset...</span>
+                      <span>Synthesizing Atelier Asset...</span>
                     </>
                   ) : (
                     <>
-                      <Sparkles className="w-3.5 h-3.5 text-gold" />
-                      <span>Generate First Image</span>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Generate AI Product Image</span>
                     </>
                   )}
                 </button>
 
                 <button
                   type="button"
+                  onClick={() => {
+                    const url = prompt("Enter image URL:", "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?auto=format&fit=crop&w=800&q=80");
+                    if (url) {
+                      setGeneratedImage(url);
+                      setImageApproved(true);
+                    }
+                  }}
                   className="border border-border hover:border-gold px-4 py-2 text-xs uppercase tracking-caps font-medium text-ink flex items-center space-x-2 transition-colors"
                 >
                   <Upload className="w-3.5 h-3.5 text-muted" />
-                  <span>Upload Image Instead</span>
+                  <span>Set Image URL</span>
                 </button>
               </div>
             </div>
@@ -317,7 +460,7 @@ export default function NewProductPage() {
                 <div className="flex items-center justify-between text-xs">
                   <span className="inline-flex items-center space-x-1 text-gold font-medium">
                     <Sparkles className="w-3 h-3" />
-                    <span>AI-Generated &middot; Draft Staging Asset</span>
+                    <span>AI-Generated / Staged Asset</span>
                   </span>
                   <span className="text-[11px] text-muted">Dimensions: 800 x 1000px</span>
                 </div>

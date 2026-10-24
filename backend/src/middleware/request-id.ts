@@ -5,6 +5,7 @@ declare global {
   namespace Express {
     interface Request {
       id?: string;
+      requestId?: string;
     }
   }
 }
@@ -13,6 +14,7 @@ export function requestIdMiddleware(req: Request, res: Response, next: NextFunct
   const existingId = req.headers["x-request-id"] as string | undefined;
   const id = existingId && /^[a-zA-Z0-9_-]{1,64}$/.test(existingId) ? existingId : crypto.randomUUID();
   req.id = id;
+  req.requestId = id;
   res.setHeader("X-Request-Id", id);
   next();
 }

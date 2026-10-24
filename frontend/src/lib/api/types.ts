@@ -6,11 +6,20 @@ export interface AdminUserDTO {
   createdAt: string;
 }
 
+export interface ApiPagination {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export interface ApiSuccessResponse<T> {
   data: T;
+  pagination?: ApiPagination;
   meta?: {
     requestId?: string;
     csrfToken?: string;
+    message?: string;
   };
 }
 

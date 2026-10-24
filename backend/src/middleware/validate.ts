@@ -35,3 +35,15 @@ export function validate(schemas: ValidationSchemas) {
     }
   };
 }
+
+export function validateBody(schema: AnyZodObject) {
+  return validate({ body: schema });
+}
+
+export function validateQuery(schema: AnyZodObject) {
+  return validate({ query: schema });
+}
+
+export function validateParams(schema: AnyZodObject) {
+  return validate({ params: schema });
+}

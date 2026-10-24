@@ -5,6 +5,7 @@ import { MarqueeTicker } from "@/components/editorial/MarqueeTicker";
 import { EditorialSplit } from "@/components/editorial/EditorialSplit";
 import { ProductCard } from "@/components/product/ProductCard";
 import { MOCK_STOREFRONT_FIXTURES } from "@/components/product/mockFixtures";
+import { getStorefrontProducts } from "@/lib/api/catalog";
 import { ServiceHighlights } from "@/components/editorial/ServiceHighlights";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SectionReveal } from "@/components/motion/SectionReveal";
@@ -12,7 +13,15 @@ import { StaggeredGrid } from "@/components/motion/StaggeredGrid";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
-export default function StorefrontHomePage() {
+export default async function StorefrontHomePage() {
+  // Fetch real published products from Express backend
+  const { items: products } = await getStorefrontProducts({ limit: 8 }).catch((err) => {
+    console.warn("Using fixture fallback during build/offline fetch:", err?.message);
+    return { items: MOCK_STOREFRONT_FIXTURES, total: MOCK_STOREFRONT_FIXTURES.length };
+  });
+
+  const displayProducts = products && products.length > 0 ? products : MOCK_STOREFRONT_FIXTURES;
+
   return (
     <div className="min-h-screen flex flex-col bg-canvas">
       {/* 1. Announcement Strip */}
@@ -53,7 +62,7 @@ export default function StorefrontHomePage() {
 
           {/* 4-column responsive grid with staggered entrance */}
           <StaggeredGrid className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {MOCK_STOREFRONT_FIXTURES.map((product, index) => (
+            {displayProducts.map((product, index) => (
               <ProductCard
                 key={product.id}
                 product={product}

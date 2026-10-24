@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useMemo, use } from "react";
+import { useState, useMemo, use, useEffect } from "react";
 import Link from "next/link";
 import { AnnouncementBar } from "@/components/layout/AnnouncementBar";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { ProductCard } from "@/components/product/ProductCard";
-import { MOCK_PRODUCTS, DetailedProduct } from "@/components/product/mockFixtures";
-import { SlidersHorizontal, ChevronRight, X, RotateCcw } from "lucide-react";
+import type { ProductViewModel } from "@/components/product/product.types";
+import { MOCK_PRODUCTS } from "@/components/product/mockFixtures";
+import { getStorefrontProducts } from "@/lib/api/catalog";
+import { SlidersHorizontal, ChevronRight, X, RotateCcw, Loader2 } from "lucide-react";
 import { SectionReveal } from "@/components/motion/SectionReveal";
 import { StaggeredGrid } from "@/components/motion/StaggeredGrid";
 
@@ -27,36 +29,44 @@ export default function CollectionPage({ params }: CollectionPageProps) {
   const [inStockOnly, setInStockOnly] = useState<boolean>(false);
   const [mobileFilterOpen, setMobileFilterOpen] = useState<boolean>(false);
 
+  // Products from backend
+  const [products, setProducts] = useState<ProductViewModel[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
   // Sync category if URL slug changes
   const activeCategory = selectedCategory || categorySlug;
 
-  // Filtered and sorted products
-  const filteredProducts = useMemo(() => {
-    return MOCK_PRODUCTS.filter((product) => {
-      // Category match
-      if (activeCategory !== "all" && product.category.toLowerCase() !== activeCategory) {
-        return false;
-      }
-      // Material match
-      if (selectedMaterial !== "all" && !product.material.toLowerCase().includes(selectedMaterial.toLowerCase())) {
-        return false;
-      }
-      // Size match
-      if (selectedSize !== "all" && !product.sizes.some((s) => s.size === selectedSize && s.available)) {
-        return false;
-      }
-      // Stock match
-      if (inStockOnly && product.stockStatus !== "in_stock") {
-        return false;
-      }
-      return true;
-    }).sort((a, b) => {
-      if (sortBy === "price-asc") return a.pricePaise - b.pricePaise;
-      if (sortBy === "price-desc") return b.pricePaise - a.pricePaise;
-      if (sortBy === "name-asc") return a.name.localeCompare(b.name);
-      return 0; // Default featured order
-    });
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+
+    getStorefrontProducts({
+      category: activeCategory,
+      material: selectedMaterial !== "all" ? selectedMaterial : undefined,
+      size: selectedSize !== "all" ? selectedSize : undefined,
+      inStock: inStockOnly,
+      sortBy,
+    })
+      .then((res) => {
+        if (!cancelled) {
+          setProducts(res.items);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.warn("Falling back to catalog fixtures:", err?.message);
+          setProducts(MOCK_PRODUCTS);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [activeCategory, selectedMaterial, selectedSize, inStockOnly, sortBy]);
+
+  const filteredProducts = products;
 
   const hasActiveFilters = selectedMaterial !== "all" || selectedSize !== "all" || inStockOnly;
 

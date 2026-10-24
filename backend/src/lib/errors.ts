@@ -13,6 +13,12 @@ export class AppError extends Error {
   }
 }
 
+export class BadRequestError extends AppError {
+  constructor(message: string = "Bad request.", fields?: Record<string, string>) {
+    super(400, "BAD_REQUEST", message, fields);
+  }
+}
+
 export class ValidationError extends AppError {
   constructor(message: string = "Validation failed.", fields?: Record<string, string>) {
     super(400, "VALIDATION_ERROR", message, fields);
