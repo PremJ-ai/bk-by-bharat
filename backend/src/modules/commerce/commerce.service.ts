@@ -289,7 +289,7 @@ export class CommerceService {
   /**
    * Admin: Generate / Update final verified invoice and reserve stock
    */
-  async createInvoice(orderId: string, adminId: string, input: CreateInvoiceInput) {
+  async createInvoice(orderId: string, adminId: string | undefined, input: CreateInvoiceInput) {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: { items: true, invoices: true },
@@ -490,7 +490,7 @@ export class CommerceService {
   /**
    * Admin: Verify payment and finalize stock decrement
    */
-  async verifyPayment(orderId: string, adminId: string, input: VerifyPaymentInput) {
+  async verifyPayment(orderId: string, adminId: string | undefined, input: VerifyPaymentInput) {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: { items: true, paymentProofs: true },
@@ -570,7 +570,7 @@ export class CommerceService {
   /**
    * Admin: Dispatch Shipment
    */
-  async createShipment(orderId: string, adminId: string, input: CreateShipmentInput) {
+  async createShipment(orderId: string, adminId: string | undefined, input: CreateShipmentInput) {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
     });
@@ -781,7 +781,7 @@ export class CommerceService {
   /**
    * Admin: Update store payment settings
    */
-  async updatePaymentSettings(adminId: string, input: UpdatePaymentSettingsInput) {
+  async updatePaymentSettings(adminId: string | undefined, input: UpdatePaymentSettingsInput) {
     const updated = await prisma.storeSettings.upsert({
       where: { id: "default" },
       update: {

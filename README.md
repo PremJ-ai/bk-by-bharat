@@ -1,59 +1,98 @@
-# BHARAT — Fashion E-Commerce Atelier
+# BHARAT — Luxury Menswear E-Commerce Atelier
 
-An editorial menswear e-commerce platform and studio administration system built with an intentional two-application architecture:
+An editorial menswear e-commerce platform and atelier operations system engineered with an uncompromising architectural boundary between presentation and commerce authority:
 
-- **Storefront & Admin UI (`/frontend`)**: Next.js App Router, React 19, TypeScript, and Tailwind CSS.
-- **Commerce & Identity Core (`/backend`)**: Express.js, TypeScript, PostgreSQL, Prisma ORM, and Argon2id session security.
+- **Storefront & Admin Experience (`/frontend`)**: Next.js 15 App Router, React 19, TypeScript, Vanilla CSS design tokens with Tailwind CSS utilities, and GSAP 3 animation pipeline.
+- **Commerce & Identity Core (`/backend`)**: Express.js, TypeScript, PostgreSQL 16, Prisma ORM, Argon2id password hashing, and stateful server-side session management.
 - **Canonical API Contract (`/contracts/openapi.yaml`)**: OpenAPI 3.1 specification.
 
 ---
 
-## Architecture Principles
+## Architectural Philosophy & Core Tenets
 
-1. **Strict Application Boundary**: The frontend owns presentation; the backend owns authentication, business rules, persistence, and inventory. Next.js never connects to the database directly or exposes provider secrets.
-2. **Server-Enforced Security**: Administrator authentication, authorization, session rotation, logout revocation, CSRF origin & double-submit checks, and login rate limiting are enforced inside Express.
-3. **Controlled Administrator Bootstrap**: No public admin registration or customer accounts exist. The first administrator is created strictly via a server-side CLI tool.
+1. **Guest-Only Commerce Model**: There are no customer registrations, passwords, or customer accounts. Patrons transact via guest checkout and track their orders using cryptographically random 32-byte opaque tokens hashed with SHA-256 in the database.
+2. **Server-Enforced Commercial Authority**: The frontend owns visual presentation and responsiveness. The Express core is the single source of truth for pricing minor units (paise), inventory availability, stock reservation holds, and state-machine transitions.
+3. **Manual Bank Ledger Settlement (QR Payment)**: Patrons scan a verified dynamic UPI QR code or click an app deep link (`upi://pay?...`). Uploading a transaction screenshot transitions the order to `PAYMENT_PROOF_RECEIVED`. **A proof upload alone never marks an order paid.** Staff independently verify the credit in their bank console before marking the order `PAID`, which permanently decrements inventory.
+4. **Controlled Administrative Identity**: Public admin registration is permanently disabled. Initial administrator provisioning is performed exclusively via a secure CLI script (`npm run admin:bootstrap --workspace=backend`).
+5. **WhatsApp-First Transactional Lifecycle**: Outbound communications (order receipt, verified invoice with payment instructions, proof acknowledgment, payment confirmation, and shipment dispatch with tracking URL) are recorded and dispatched through an audit-logged WhatsApp service.
+
+---
+
+## Monorepo Layout
+
+```text
+bk-by-bharat/
+├── backend/
+│   ├── prisma/
+│   │   ├── schema.prisma           # Relational schema (Catalog, Orders, Invoices, Media, WhatsApp)
+│   │   └── migrations/             # Timestamped SQL migrations
+│   ├── src/
+│   │   ├── config/                 # Typed environment & constants
+│   │   ├── db/                     # Prisma singleton & idempotent catalog seeder
+│   │   ├── middleware/             # Rate limiting, CSRF, auth, RBAC, request correlation
+│   │   ├── modules/
+│   │   │   ├── admin-auth/         # Argon2id authentication & session rotation
+│   │   │   ├── catalog/            # Products, categories, variants, and admin CRUD
+│   │   │   ├── commerce/           # Guest checkout, invoicing, QR verification & shipments
+│   │   │   ├── media/              # AI Lookbook synthesis & secure uploads
+│   │   │   └── whatsapp/           # Outbound dispatch & inbound webhook processing
+│   │   ├── routes/                 # Express v1 central router
+│   │   └── app.ts                  # Application assembly & static /uploads serving
+│   ├── tests/                      # Vitest test suite (43 integration tests)
+│   └── uploads/                    # Local storage for direct and synthesized media
+├── frontend/
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── (store)/            # Storefront routes (PDP, Collections, Checkout, Order Status)
+│   │   │   └── admin/              # Operations portal (Catalog, Orders, Proof Review, Settings)
+│   │   ├── components/             # Reusable UI & editorial motion components
+│   │   ├── context/                # Client CartContext with persistent local bag
+│   │   ├── lib/
+│   │   │   ├── api/                # Typed API clients (catalog, commerce, media, auth)
+│   │   │   └── motion/             # Centralized GSAP 3 configuration & hooks
+│   └── next.config.ts              # Reverse proxy rewrite (/api/v1 -> backend)
+├── contracts/
+│   └── openapi.yaml                # OpenAPI 3.1 specification
+└── docker-compose.yml              # Local PostgreSQL 16 container setup
+```
 
 ---
 
 ## Prerequisites
 
-- **Node.js**: v22+ LTS (verified on v22.14.0)
-- **Package Manager**: npm workspaces (or pnpm)
-- **Database**: PostgreSQL 16 (local installation or Docker Compose)
-- **Container Engine**: Docker Desktop (optional for local PostgreSQL)
+- **Node.js**: v22+ LTS (verified on Node.js v22.14.0)
+- **Package Manager**: npm workspaces (v10+)
+- **Database**: PostgreSQL 16 (local or Docker container)
+- **Container Engine**: Docker Desktop (recommended for local database)
 
 ---
 
-## Local Setup & Installation
+## Local Development Setup
 
 ### 1. Clone & Install Dependencies
 
 From the repository root:
 
 ```bash
-# Install dependencies across all workspaces
 npm install
 ```
 
-### 2. Start PostgreSQL Database
-
-Start the provided PostgreSQL 16 container:
+### 2. Start PostgreSQL 16 Container
 
 ```bash
 npm run db:up
 # Or: docker compose up -d
 ```
 
-Verify the database container is healthy:
+Verify that the `fashion_commerce_postgres` container is healthy on port `5432`:
 
 ```bash
 docker ps
 ```
 
-### 3. Configure Environment Variables
+### 3. Environment Configuration
 
-Create `.env` files in both applications from their `.env.example` templates:
+Create `.env` in `backend/` and `.env.local` in `frontend/`:
 
 **Backend (`backend/.env`)**:
 ```dotenv
@@ -71,106 +110,130 @@ NEXT_PUBLIC_SITE_URL=http://localhost:3000
 API_BASE_URL=http://localhost:4000/api/v1
 ```
 
-### 4. Database Migrations & Client Generation
-
-Generate the Prisma client and apply the initial database schema:
+### 4. Database Schema Migration & Seeding
 
 ```bash
 # Generate Prisma Client
 npm run prisma:generate --workspace=backend
 
-# Apply migrations
+# Apply SQL migrations
 npm run prisma:migrate --workspace=backend
+
+# Seed store settings, categories, and 6 published garments with variants
+npx tsx src/db/seed.ts --workspace=backend
 ```
 
-### 5. One-Time Administrator Bootstrap
-
-Create the first administrator account via the server-side CLI. Public registration is permanently disabled.
+### 5. Bootstrap Initial Administrator
 
 ```bash
-# Interactive bootstrap:
-npm run admin:bootstrap --workspace=backend
-
-# Or non-interactive scripted bootstrap:
-npm run admin:bootstrap --workspace=backend -- --username=admin@fashion.local --password=YourStrongPassword123!
+npm run admin:bootstrap --workspace=backend -- --username=admin@atelier.local --password=YourStrongPassword123!
 ```
 
 ---
 
-## Running in Development
+## Running the Applications
 
-Start both applications in separate terminal sessions:
+Launch both development servers concurrently:
 
 ```bash
-# Start Express Backend (Port 4000)
+# Terminal 1: Backend Express Server (Port 4000)
 npm run dev:backend
 
-# Start Next.js Storefront (Port 3000)
+# Terminal 2: Frontend Next.js Server (Port 3000)
 npm run dev:frontend
 ```
 
-Access the applications:
-- **Storefront Homepage**: [http://localhost:3000](http://localhost:3000)
+### Application URLs:
+- **Editorial Storefront**: [http://localhost:3000](http://localhost:3000)
+- **Guest Checkout**: [http://localhost:3000/checkout](http://localhost:3000/checkout)
 - **Admin Staff Login**: [http://localhost:3000/admin/login](http://localhost:3000/admin/login)
-- **Protected Admin Dashboard**: [http://localhost:3000/admin](http://localhost:3000/admin)
-- **Backend Health Live**: [http://localhost:4000/health/live](http://localhost:4000/health/live)
-- **Backend Health Ready**: [http://localhost:4000/health/ready](http://localhost:4000/health/ready)
+- **Admin Order Queue**: [http://localhost:3000/admin/orders](http://localhost:3000/admin/orders)
+- **Admin Product Catalog**: [http://localhost:3000/admin/products](http://localhost:3000/admin/products)
+- **Payment & UPI Settings**: [http://localhost:3000/admin/settings/payment](http://localhost:3000/admin/settings/payment)
+- **WhatsApp Audit Logs**: [http://localhost:3000/admin/whatsapp](http://localhost:3000/admin/whatsapp)
+- **Backend Health Liveness**: [http://localhost:4000/health/live](http://localhost:4000/health/live)
+- **Backend Health Readiness**: [http://localhost:4000/health/ready](http://localhost:4000/health/ready)
 
 ---
 
-## Automated Verification & Testing
+## Commercial Workflow Walkthrough
 
-### Run Backend Unit & Integration Tests
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Patron as Guest Patron
+    participant Storefront as Next.js Storefront
+    participant Core as Express Backend
+    participant DB as PostgreSQL
+    actor Master as Atelier Master
+    participant WA as WhatsApp Service
 
-Execute the Vitest suite covering health endpoints, admin authentication, session lifecycle, CSRF defenses, and rate limiting:
+    Patron->>Storefront: Adds garments to bag & proceeds to checkout
+    Patron->>Core: POST /api/v1/orders/checkout (items, contact, consent)
+    Core->>DB: Validates stock, calculates prices, generates opaque token & order
+    Core-->>WA: Dispatches order receipt template
+    Core-->>Storefront: Returns order number & private opaque status token
+    Storefront-->>Patron: Displays confirmation & private tracking view
 
+    Master->>Core: GET /api/v1/admin/orders (reviews pending queue)
+    Master->>Core: POST /api/v1/admin/orders/:id/invoice (shipping, GST, discount)
+    Core->>DB: Atomically increments variant reservedStock & issues Invoice
+    Core-->>WA: Dispatches verified bill with UPI QR code & instructions
+
+    Patron->>Storefront: Opens /order-status/:token, scans UPI QR & pays
+    Patron->>Core: POST /api/v1/orders/payment-proof (UTR reference & screenshot)
+    Core->>DB: Updates status to PAYMENT_PROOF_RECEIVED
+    Core-->>WA: Acknowledges proof receipt
+
+    Master->>Core: POST /api/v1/admin/orders/:id/verify-payment (UTR reference)
+    Core->>DB: Marks order PAID, decrements stock & clears reservedStock
+    Core-->>WA: Dispatches payment confirmed notice & tailoring queue entry
+
+    Master->>Core: POST /api/v1/admin/orders/:id/ship (carrier, trackingNumber, URL)
+    Core->>DB: Marks order SHIPPED & creates Shipment record
+    Core-->>WA: Dispatches tracking details to patron
+```
+
+---
+
+## Quality Gates & Verification
+
+All quality gates pass with zero warnings or errors:
+
+### 1. Backend Test Suite (43 Tests)
 ```bash
 npm run test --workspace=backend
 ```
+- `tests/health.test.ts` (3 tests): Liveness, readiness, and database connection checks.
+- `tests/admin-auth.test.ts` (9 tests): Argon2id hashing, session cookies, CSRF protection, and revocation.
+- `tests/security.test.ts` (4 tests): CSRF double-submit validation and IP rate limiting.
+- `tests/catalog.test.ts` (12 tests): Storefront pagination, slug queries, admin drafting, SKU uniqueness, and publishing.
+- `tests/media.test.ts` (5 tests): AI Lookbook draft synthesis, file uploads, mime validation, and media reordering.
+- `tests/commerce.test.ts` (10 tests): Guest checkout, opaque tokens, stock reservation holds, payment proof upload (verifying upload never marks paid), bank ledger verification, shipment dispatch, and cancellation release.
 
-### Typecheck & Production Builds
-
+### 2. Typechecking Across Workspaces
 ```bash
-# Typecheck both applications
 npm run typecheck --workspaces
+```
 
-# Build production bundles
+### 3. Production Bundles
+```bash
 npm run build --workspaces
 ```
 
 ---
 
-## API Contract
+## Security Hardening Details
 
-The API contract is canonically specified at [`contracts/openapi.yaml`](contracts/openapi.yaml).
-In production or local development, Next.js reverse-proxies `/api/v1/:path*` to the Express backend to enforce same-origin security and preserve `HttpOnly` cookie behavior.
+- **CSRF Defense**: State-changing requests enforce matching origin/referer headers and double-submit CSRF cookie validation (`X-CSRF-Token`).
+- **Rate Limiting**: IP-based rate limiting on sensitive authentication and commerce routes (`express-rate-limit`).
+- **Security Headers**: Standard security headers enforced via `helmet`.
+- **Upload Restrictions**: Max 10MB limit and whitelist validation for `image/jpeg`, `image/png`, `image/webp`, and `image/avif`.
+- **Authoritative Accounting**: All prices in minor units (paise); integer calculations prevent floating point discrepancies.
+- **Opaque Token Privacy**: Database stores only SHA-256 hashes of private status tokens, preventing IDOR or sequential enumeration attacks.
 
 ---
 
-## Motion & Media Architecture (Milestone 2)
+## License
 
-The animation and media presentation layer is built on GSAP 3 with `@gsap/react`, `ScrollTrigger`, and `ScrollSmoother`.
-
-### 1. Centralized GSAP Configuration
-- **File**: `frontend/src/lib/motion/gsap.ts`
-- **Safeguard**: Centralized, idempotent plugin registration runs exclusively on client mounts (`typeof window !== 'undefined'`), eliminating server-side rendering or Next.js hydration mismatches.
-- **Motion Tokens**: Durations (`fast: 0.22s`, `ui: 0.3s`, `reveal: 0.75s`, `editorial: 1.0s`) and eases (`power2.out`, `power3.out`) strictly match `design.md`.
-
-### 2. Route Eligibility for ScrollSmoother
-ScrollSmoother requires the `#smooth-wrapper` and `#smooth-content` container hierarchy. It is restricted to eligible storefront routes to prevent interference with forms, checkout flows, and operational tooling:
-- **Eligible Routes**: Storefront homepage (`/`), collection catalogs (`/collections/*`), product detail showcases (`/products/*`), and craft dossiers (`/craft`).
-- **Excluded Routes**: Admin portal (`/admin/*`), guest checkout submission (`/checkout`), order confirmation screens (`/orders/*`), and private status views (`/order-status/*`).
-- **Fixed Layer Isolation**: Viewport-fixed overlays—including `CartDrawer` (in RootLayout) and modal dialogs—are structured outside transformed content (`#smooth-content`), preventing browser coordinate clipping and stacking issues.
-
-### 3. Reusable Motion Components
-- `<SectionReveal>`: Scoped headline and section entrance (`top 82%`, `once: true`, `power3.out`).
-- `<StaggeredGrid>`: Scoped entrance targeting `[data-grid-item]` elements with controlled stagger (`0.06s`) as product cards scroll into view.
-- `<EditorialCropReveal>`: Smooth clip-path reveal for lifestyle and craft storytelling frames.
-- `<ParallaxFrame>`: Subtle vertical parallax travel (max 4-5%) guarded by `gsap.matchMedia("(min-width: 1024px)")` to run on desktop displays only.
-- `<ProductMedia>`: Adaptive image/video media presentation with play promise catch handling (`.play().catch(...)`), muted loop attributes, IntersectionObserver pause-on-offscreen, and accessible still poster fallback.
-
-### 4. Accessibility & Performance Guardrails
-- **`prefers-reduced-motion`**: When enabled at the OS or browser level, all GSAP entrance tweens, parallax calculations, and ScrollSmoother instances are bypassed. Content remains 100% visible and interactive with standard native scrolling.
-- **Touch Devices**: `smoothTouch: 0` is enforced to preserve native mobile touch momentum scrolling and responsive gesture handling.
-- **Cleanup**: React Strict Mode and Next.js route transitions invoke comprehensive teardown (`ScrollSmoother.get()?.kill()`, `ScrollTrigger.getAll().forEach(t => t.kill())`), preventing memory leaks, duplicate instances, and stale trigger bounding boxes.
-- **Interaction Protection**: No animations touch size chips, quantity buttons, form inputs, focus rings, or checkout submission controls.
+Private Proprietary Software — Bharat Atelier New Delhi. All rights reserved.

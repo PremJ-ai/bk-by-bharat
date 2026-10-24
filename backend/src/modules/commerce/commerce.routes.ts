@@ -107,7 +107,7 @@ publicOrdersRouter.post(
 // =============================================================================
 export const adminOrdersRouter = Router();
 
-adminOrdersRouter.use(authenticate, authorize(["ADMIN", "ORDER_MANAGER"]));
+adminOrdersRouter.use(authenticate, authorize(["ADMIN", "SUPPORT"]));
 
 // Admin: List all orders with filters
 adminOrdersRouter.get("/", async (req: Request, res: Response, next: NextFunction) => {
@@ -276,7 +276,7 @@ whatsappRouter.post("/webhook", async (req: Request, res: Response, next: NextFu
 whatsappRouter.get(
   "/messages",
   authenticate,
-  authorize(["ADMIN", "ORDER_MANAGER"]),
+  authorize(["ADMIN", "SUPPORT"]),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const recipientPhone = req.query.phone as string | undefined;
