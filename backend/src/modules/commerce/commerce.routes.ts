@@ -515,3 +515,49 @@ whatsappRouter.get(
     }
   }
 );
+
+
+export const maintenanceRouter = Router();
+
+maintenanceRouter.get(
+  "/expire-payment-holds",
+  async (req: Request, res: Response, next: NextFunction) => {
+    const configuredSecret = process.env.CRON_SECRET;
+    if (!configuredSecret) {
+      res.status(503).json({
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message: "CRON_SECRET is not configured for maintenance tasks.",
+        },
+      });
+      return;
+    }
+
+    const authorization = req.headers.authorization || "";
+    const suppliedSecret = authorization.startsWith("Bearer ")
+      ? authorization.slice("Bearer ".length)
+      : "";
+    const expectedBuffer = Buffer.from(configuredSecret);
+    const suppliedBuffer = Buffer.from(suppliedSecret);
+    const authorized =
+      suppliedBuffer.length === expectedBuffer.length &&
+      crypto.timingSafeEqual(suppliedBuffer, expectedBuffer);
+
+    if (!authorized) {
+      res.status(401).json({
+        error: { code: "UNAUTHORIZED", message: "Valid cron authorization is required." },
+      });
+      return;
+    }
+
+    try {
+      const result = await commerceService.expirePaymentHolds();
+      res.status(200).json({
+        data: result,
+        meta: { requestId: req.requestId },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);

@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
 import { prisma } from "../../db/prisma.js";
+import { logger } from "../../lib/logger.js";
 import {
   BadRequestError,
   NotFoundError,
@@ -367,7 +368,11 @@ export class CommerceService {
       throw new NotFoundError(`Order '${orderId}' not found.`);
     }
 
-    if (order.status !== "AWAITING_ADMIN_REVIEW" && order.status !== "AWAITING_CUSTOMER_PAYMENT") {
+    if (
+      order.status !== "AWAITING_ADMIN_REVIEW" &&
+      order.status !== "AWAITING_CUSTOMER_PAYMENT" &&
+      order.status !== "EXPIRED"
+    ) {
       throw new BadRequestError("Cannot issue or revise an invoice for an order in status " + order.status + ".");
     }
 
@@ -396,7 +401,7 @@ export class CommerceService {
     // Execute in transaction: reserve stock on variants, deactivate old invoices, create new invoice
     const result = await prisma.$transaction(async (tx) => {
       // 1. Atomically reserve stock on variants if not already reserved
-      if (order.status === "AWAITING_ADMIN_REVIEW") {
+      if (order.status === "AWAITING_ADMIN_REVIEW" || order.status === "EXPIRED") {
         for (const item of order.items) {
           if (item.variantId) {
             const reserved = await tx.$executeRawUnsafe(
@@ -1263,6 +1268,103 @@ export class CommerceService {
   /**
    * Admin: List all orders with filters & pagination
    */
+  /**
+   * Expire unpaid invoice holds and release inventory safely.
+   * A conditional status update claims each order so overlapping scheduled
+   * invocations or concurrent admin actions cannot release the same hold twice.
+   */
+  async expirePaymentHolds(batchSize = 100) {
+    const now = new Date();
+    const candidates = await prisma.order.findMany({
+      where: {
+        status: "AWAITING_CUSTOMER_PAYMENT",
+        paymentStatus: { in: ["REQUESTED", "REJECTED"] },
+        paymentHoldExpiresAt: { lte: now },
+      },
+      include: { items: true },
+      orderBy: { paymentHoldExpiresAt: "asc" },
+      take: Math.min(500, Math.max(1, batchSize)),
+    });
+
+    let expired = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const candidate of candidates) {
+      try {
+        const didExpire = await prisma.$transaction(async (tx) => {
+          const claimed = await tx.order.updateMany({
+            where: {
+              id: candidate.id,
+              status: "AWAITING_CUSTOMER_PAYMENT",
+              paymentStatus: { in: ["REQUESTED", "REJECTED"] },
+              paymentHoldExpiresAt: { lte: now },
+            },
+            data: {
+              status: "EXPIRED",
+              paymentStatus: "EXPIRED",
+              paymentHoldExpiresAt: null,
+            },
+          });
+
+          if (claimed.count !== 1) return false;
+
+          for (const item of candidate.items) {
+            if (!item.variantId) continue;
+
+            const released = await tx.productVariant.updateMany({
+              where: {
+                id: item.variantId,
+                reservedStock: { gte: item.quantity },
+              },
+              data: { reservedStock: { decrement: item.quantity } },
+            });
+
+            if (released.count !== 1) {
+              throw new ConflictError(
+                "Could not release the expired stock reservation for SKU " + item.sku +
+                ". Expiration was rolled back for manual review."
+              );
+            }
+          }
+
+          await tx.auditEvent.create({
+            data: {
+              actorAdminId: null,
+              action: "PAYMENT_HOLD_EXPIRED",
+              resourceType: "Order",
+              resourceId: candidate.id,
+              details: {
+                orderNumber: candidate.orderNumber,
+                previousPaymentStatus: candidate.paymentStatus,
+                expiredAt: now,
+              },
+            },
+          });
+
+          return true;
+        });
+
+        if (didExpire) expired += 1;
+        else skipped += 1;
+      } catch (error) {
+        failed += 1;
+        logger.error(
+          { error, orderId: candidate.id, orderNumber: candidate.orderNumber },
+          "Failed to expire payment hold and release inventory"
+        );
+      }
+    }
+
+    return {
+      checked: candidates.length,
+      expired,
+      skipped,
+      failed,
+      processedAt: now,
+    };
+  }
+
   async listAdminOrders(options: {
     status?: string;
     search?: string;

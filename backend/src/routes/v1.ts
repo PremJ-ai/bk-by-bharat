@@ -7,6 +7,7 @@ import {
   adminOrdersRouter,
   adminSettingsRouter,
   whatsappRouter,
+  maintenanceRouter,
 } from "../modules/commerce/commerce.routes.js";
 import { checkDatabaseConnection } from "../db/prisma.js";
 
@@ -62,3 +63,6 @@ v1Router.use("/admin/settings", adminSettingsRouter);
 
 // WhatsApp webhook and administration (/api/v1/whatsapp)
 v1Router.use("/whatsapp", whatsappRouter);
+
+// Protected scheduled maintenance (/api/v1/maintenance)
+v1Router.use("/maintenance", maintenanceRouter);

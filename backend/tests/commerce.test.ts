@@ -16,6 +16,7 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
   let guestToken: string;
   let orderNumber: string;
   let orderId: string;
+  let expiryOrderId: string | undefined;
 
   beforeAll(async () => {
     // 1. Create dedicated admin
@@ -83,6 +84,15 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
 
   afterAll(async () => {
     // Clean up test order and dependencies
+    if (expiryOrderId) {
+      await prisma.whatsAppMessage.deleteMany({ where: { orderId: expiryOrderId } });
+      await prisma.paymentProof.deleteMany({ where: { orderId: expiryOrderId } });
+      await prisma.invoice.deleteMany({ where: { orderId: expiryOrderId } });
+      await prisma.orderItem.deleteMany({ where: { orderId: expiryOrderId } });
+      await prisma.auditEvent.deleteMany({ where: { resourceType: "Order", resourceId: expiryOrderId } });
+      await prisma.order.deleteMany({ where: { id: expiryOrderId } });
+    }
+
     if (orderId) {
       await prisma.whatsAppMessage.deleteMany({ where: { orderId } });
       await prisma.paymentProof.deleteMany({ where: { orderId } });
@@ -804,5 +814,85 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
         process.env.WHATSAPP_APP_SECRET = previousAppSecret;
       }
     }
+  it("expires unpaid invoice holds, releases stock, and allows an admin to reissue", async () => {
+    const variantBefore = await prisma.productVariant.findUniqueOrThrow({
+      where: { id: testVariantId },
+    });
+    const reservedBefore = variantBefore.reservedStock;
+
+    const checkout = await request(app)
+      .post("/api/v1/orders/checkout")
+      .send({
+        customerName: "Expiry Test Customer",
+        whatsappNumber: "+919876543210",
+        addressLine1: "42 Lodhi Estate",
+        city: "New Delhi",
+        stateRegion: "Delhi",
+        postalCode: "110003",
+        whatsappConsent: true,
+        items: [{ variantId: testVariantId, quantity: 1 }],
+      });
+
+    expect(checkout.status).toBe(201);
+    const createdOrder = await prisma.order.findUniqueOrThrow({
+      where: { orderNumber: checkout.body.data.orderNumber },
+    });
+    expiryOrderId = createdOrder.id;
+
+    const firstInvoice = await request(app)
+      .post(`/api/v1/admin/orders/${expiryOrderId}/invoice`)
+      .set("Cookie", adminCookie)
+      .send({ shippingPaise: 0 });
+    expect(firstInvoice.status).toBe(201);
+
+    await prisma.order.update({
+      where: { id: expiryOrderId },
+      data: { paymentHoldExpiresAt: new Date(Date.now() - 60_000) },
+    });
+
+    const expiryResult = await new CommerceService().expirePaymentHolds();
+    expect(expiryResult.expired).toBe(1);
+    expect(expiryResult.failed).toBe(0);
+
+    const expiredOrder = await prisma.order.findUniqueOrThrow({ where: { id: expiryOrderId } });
+    expect(expiredOrder.status).toBe("EXPIRED");
+    expect(expiredOrder.paymentStatus).toBe("EXPIRED");
+    expect(expiredOrder.paymentHoldExpiresAt).toBeNull();
+
+    const afterExpiry = await prisma.productVariant.findUniqueOrThrow({
+      where: { id: testVariantId },
+    });
+    expect(afterExpiry.stock).toBe(variantBefore.stock);
+    expect(afterExpiry.reservedStock).toBe(reservedBefore);
+
+    const reissuedInvoice = await request(app)
+      .post(`/api/v1/admin/orders/${expiryOrderId}/invoice`)
+      .set("Cookie", adminCookie)
+      .send({ shippingPaise: 0 });
+    expect(reissuedInvoice.status).toBe(201);
+
+    const reissuedOrder = await prisma.order.findUniqueOrThrow({ where: { id: expiryOrderId } });
+    expect(reissuedOrder.status).toBe("AWAITING_CUSTOMER_PAYMENT");
+    expect(reissuedOrder.paymentStatus).toBe("REQUESTED");
+
+    const afterReissue = await prisma.productVariant.findUniqueOrThrow({
+      where: { id: testVariantId },
+    });
+    expect(afterReissue.reservedStock).toBe(reservedBefore + 1);
+
+    // Expire the reissued hold too so the test leaves stock exactly as it found it.
+    await prisma.order.update({
+      where: { id: expiryOrderId },
+      data: { paymentHoldExpiresAt: new Date(Date.now() - 60_000) },
+    });
+    const cleanupResult = await new CommerceService().expirePaymentHolds();
+    expect(cleanupResult.expired).toBe(1);
+
+    const afterCleanup = await prisma.productVariant.findUniqueOrThrow({
+      where: { id: testVariantId },
+    });
+    expect(afterCleanup.reservedStock).toBe(reservedBefore);
+  });
+
   });
 });

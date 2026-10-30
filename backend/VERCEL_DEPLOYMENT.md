@@ -31,6 +31,7 @@ Set these in the backend Vercel project (Production and Preview only as appropri
 - SESSION_SECRET: a random secret with at least 32 characters
 - FRONTEND_ORIGIN: exact production frontend origin, including https, with no trailing slash
 - TRUST_PROXY=true
+- CRON_SECRET: random secret of at least 32 characters for scheduled expired-payment-hold cleanup
 - SUPABASE_URL: Supabase project URL
 - SUPABASE_SERVICE_ROLE_KEY: service-role secret; backend only, never a NEXT_PUBLIC_ variable
 - PAYMENT_PROOFS_BUCKET=payment-proofs
@@ -81,6 +82,12 @@ In the existing frontend Vercel project, set:
 The Supabase anon/publishable key is designed to be public and is used only by the browser to complete signed uploads. Never put SUPABASE_SERVICE_ROLE_KEY in the frontend project.
 
 Redeploy the frontend after setting these values. The frontend's Next.js rewrite forwards browser /api/v1/* requests to the backend.
+
+## Automatic payment-hold expiry
+
+The backend includes a Vercel Cron job at `/api/v1/maintenance/expire-payment-holds` that runs every 15 minutes. It expires unpaid invoices after their payment hold deadline and releases reserved variant stock in the same database transaction. The endpoint requires the `CRON_SECRET` bearer token. Admins can issue a fresh invoice for an expired order; the stock is reserved again only after availability is checked.
+
+Vercel's Hobby plan only permits one cron run per day and is restricted to personal, non-commercial use. A commercial clothing store should use a plan that permits commercial use and sub-daily scheduling, such as Pro. See [Vercel Cron usage limits](https://vercel.com/docs/cron-jobs/usage-and-pricing) and the [Hobby plan](https://vercel.com/docs/plans/hobby).
 
 ## Database and first admin
 
