@@ -1,7 +1,7 @@
 import express, { type Application } from "express";
+import type { RequestHandler } from "express";
 import { createRequire } from "node:module";
 import path from "node:path";
-import type helmetFactory from "helmet";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { env } from "./config/env.js";
@@ -13,7 +13,7 @@ import { v1Router } from "./routes/v1.js";
 import { checkDatabaseConnection } from "./db/prisma.js";
 
 const require = createRequire(import.meta.url);
-const helmet = require("helmet") as typeof helmetFactory;
+const helmet = require("helmet") as () => RequestHandler;
 
 export function createApp(): Application {
   const app = express();

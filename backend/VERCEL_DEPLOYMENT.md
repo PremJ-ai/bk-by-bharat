@@ -1,11 +1,11 @@
 # Bharat Atelier Backend — Vercel Deployment
 
-## Vercel project
+## Existing Vercel project
 
-Create a second Vercel project from the same GitHub repository:
+Use the existing backend Vercel project connected to the same GitHub repository:
 
 - Repository: PremJ-ai/bk-by-bharat
-- Project name: bharat-atelier-api
+- Project name: bk-by-bharat-api
 - Root Directory: backend
 - Framework preset: Express / Other (leave detection defaults when Express is detected)
 - Build Command: npm run vercel-build
