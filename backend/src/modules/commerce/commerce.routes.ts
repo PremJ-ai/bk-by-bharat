@@ -144,6 +144,12 @@ publicOrdersRouter.get(
         res.redirect(302, fileInfo.signedUrl);
         return;
       }
+      if (!("filePath" in fileInfo) || typeof fileInfo.filePath !== "string") {
+        res.status(404).json({
+          error: { code: "NOT_FOUND", message: "Payment proof file is unavailable on this deployment." },
+        });
+        return;
+      }
       res.setHeader("Content-Disposition", `inline; filename="${fileInfo.fileName}"`);
       res.sendFile(fileInfo.filePath);
     } catch (error) {
