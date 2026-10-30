@@ -58,6 +58,9 @@ jobs:
       - name: Apply migrations to isolated test database
         run: npm run prisma:deploy --workspace=backend
 
+      - name: Seed catalog fixtures in isolated test database
+        run: npm run db:seed --workspace=backend
+
       - name: Typecheck all workspaces
         run: npm run typecheck --workspaces
 

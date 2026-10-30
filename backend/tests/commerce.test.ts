@@ -495,7 +495,8 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
 
     // Verify payment proof record status
     const proof = await prisma.paymentProof.findFirst({
-      where: { orderId },
+      where: { orderId, status: "VERIFIED" },
+      orderBy: { verifiedAt: "desc" },
     });
     expect(proof?.status).toBe("VERIFIED");
   });
@@ -624,6 +625,17 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
       .post(`/api/v1/admin/orders/${paidOrderId}/invoice`)
       .set("Cookie", adminCookie)
       .send({ shippingPaise: 0 });
+
+    // Guest uploads payment proof before the admin can verify settlement.
+    const paidOrderProof = await request(app)
+      .post("/api/v1/orders/payment-proof")
+      .send({
+        token: paidToken,
+        fileBase64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+        mimeType: "image/png",
+        transactionReference: "UTR-TEST-CANCEL-PROOF-1",
+      });
+    expect(paidOrderProof.status).toBe(201);
 
     // Verify payment (stock -= 2, reservedStock -= 2)
     const stockBeforePayment = (await prisma.productVariant.findUnique({ where: { id: testVariantId } }))!.stock;
