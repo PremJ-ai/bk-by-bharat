@@ -1,9 +1,7 @@
-import { createApp } from "./app.js";
+import app from "./app.js";
 import { env } from "./config/env.js";
 import { logger } from "./lib/logger.js";
 import { prisma } from "./db/prisma.js";
-
-const app = createApp();
 
 const server = app.listen(env.PORT, () => {
   logger.info(`🚀 Backend server listening on port ${env.PORT} (${env.NODE_ENV})`);
