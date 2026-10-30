@@ -236,11 +236,17 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     expect(dbOrder?.items[0].quantity).toBe(2);
 
     // Verify outbound WhatsApp confirmation was logged
-    const wam = await prisma.whatsAppMessage.findFirst({
-      where: { orderId: dbOrder!.id, templateName: "order_received" },
-    });
-    expect(wam).toBeDefined();
-    expect(wam?.bodyText).toContain(orderNumber);
+    await expect
+      .poll(
+        async () => {
+          const message = await prisma.whatsAppMessage.findFirst({
+            where: { orderId: dbOrder!.id, templateName: "order_received" },
+          });
+          return message?.bodyText;
+        },
+        { timeout: 2000 },
+      )
+      .toContain(orderNumber);
   });
 
   // ---------------------------------------------------------------------------
