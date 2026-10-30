@@ -1,7 +1,15 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 
-export function CampaignHero() {
+interface CampaignHeroProps {
+  imageUrl?: string;
+  imageAlt?: string;
+}
+
+export function CampaignHero({
+  imageUrl,
+  imageAlt = "Bharat Atelier tailored menswear",
+}: CampaignHeroProps) {
   return (
     <section className="relative bg-navy text-canvas overflow-hidden py-24 md:py-36 px-6 md:px-12 border-b border-border">
       {/* Editorial Decorative Grid Backing */}
@@ -43,20 +51,38 @@ export function CampaignHero() {
           </div>
         </div>
 
-        {/* Right Editorial Spotlight Card */}
-        <div className="lg:col-span-4 bg-navy-strong/80 p-8 border border-white/10 relative">
-          <span className="text-[10px] uppercase tracking-caps text-gold block mb-2 font-medium">
-            Atelier Highlight
-          </span>
-          <h3 className="font-display text-2xl text-canvas mb-3">
-            The Double-Pleat Gurkha
-          </h3>
-          <p className="text-canvas/70 text-sm leading-relaxed mb-6">
-            Cut from 340gsm Irish linen with an extended waistband and custom brass side-adjusters.
-          </p>
-          <div className="border-t border-white/10 pt-4 flex justify-between items-center text-xs text-canvas/60">
-            <span>Handmade in Delhi</span>
-            <span className="text-gold font-medium font-sans">₹12,400</span>
+        {/* Right Editorial Spotlight with the featured catalog photograph */}
+        <div className="lg:col-span-4 bg-navy-strong/80 border border-white/10 relative overflow-hidden">
+          <div className="relative aspect-[4/3] overflow-hidden bg-navy-strong">
+            {imageUrl ? (
+              <img
+                src={imageUrl}
+                alt={imageAlt}
+                loading="eager"
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-navy-strong via-navy to-[#5b4a31]">
+                <span className="font-display text-6xl text-gold/40">BA</span>
+              </div>
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-navy/40 via-transparent to-transparent pointer-events-none" />
+          </div>
+
+          <div className="p-8">
+            <span className="text-[10px] uppercase tracking-caps text-gold block mb-2 font-medium">
+              Atelier Highlight
+            </span>
+            <h3 className="font-display text-2xl text-canvas mb-3">
+              The Double-Pleat Gurkha
+            </h3>
+            <p className="text-canvas/70 text-sm leading-relaxed mb-6">
+              Cut from 340gsm Irish linen with an extended waistband and custom brass side-adjusters.
+            </p>
+            <div className="border-t border-white/10 pt-4 flex justify-between items-center text-xs text-canvas/60">
+              <span>Handmade in Delhi</span>
+              <span className="text-gold font-medium font-sans">₹12,400</span>
+            </div>
           </div>
         </div>
       </div>
