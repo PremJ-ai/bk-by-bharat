@@ -1,0 +1,65 @@
+name: Project CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck-build-and-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: fashion_commerce_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fashion_commerce_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      NODE_ENV: test
+      PORT: 4000
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fashion_commerce_test?schema=public
+      SESSION_SECRET: ci-test-session-secret-at-least-32-characters
+      FRONTEND_ORIGIN: http://localhost:3000
+      TRUST_PROXY: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Use npm with workspace install-script approvals
+        run: npm install --global npm@12.2.1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply migrations to isolated test database
+        run: npm run prisma:deploy --workspace=backend
+
+      - name: Typecheck all workspaces
+        run: npm run typecheck --workspaces
+
+      - name: Build all workspaces
+        run: npm run build --workspaces
+
+      - name: Run backend integration tests
+        run: npm run test --workspace=backend

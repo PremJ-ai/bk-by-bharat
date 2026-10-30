@@ -398,6 +398,56 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     expect(adminRes.headers["content-type"]).toContain("image/png");
   });
 
+  it("allows admin to reject an invalid proof and lets the guest resubmit without releasing the stock hold", async () => {
+    const rejectionReason = "The receipt does not show a successful transfer. Please upload the completed transaction receipt.";
+
+    const rejected = await request(app)
+      .post(`/api/v1/admin/orders/${orderId}/reject-payment-proof`)
+      .set("Cookie", adminCookie)
+      .send({ reason: rejectionReason });
+
+    expect(rejected.status).toBe(200);
+    expect(rejected.body.data.status).toBe("AWAITING_CUSTOMER_PAYMENT");
+    expect(rejected.body.data.paymentStatus).toBe("REJECTED");
+
+    const orderAfterRejection = await prisma.order.findUnique({ where: { id: orderId } });
+    expect(orderAfterRejection?.paymentHoldExpiresAt).toBeTruthy();
+
+    const variantAfterRejection = await prisma.productVariant.findUnique({
+      where: { id: testVariantId },
+    });
+    expect(variantAfterRejection?.stock).toBe(10);
+    expect(variantAfterRejection?.reservedStock).toBe(2);
+
+    const rejectedProof = await prisma.paymentProof.findFirst({
+      where: { orderId, status: "REJECTED" },
+    });
+    expect(rejectedProof?.adminNotes).toBe(rejectionReason);
+
+    const replacement = await request(app)
+      .post("/api/v1/orders/payment-proof")
+      .send({
+        token: guestToken,
+        fileBase64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+        mimeType: "image/png",
+        transactionReference: "UPI/324198274193/Paytm",
+        notes: "Replacement receipt after first proof was rejected",
+      });
+
+    expect(replacement.status).toBe(201);
+    expect(replacement.body.data.status).toBe("PENDING_REVIEW");
+
+    const orderAfterResubmission = await prisma.order.findUnique({ where: { id: orderId } });
+    expect(orderAfterResubmission?.status).toBe("PAYMENT_PROOF_RECEIVED");
+    expect(orderAfterResubmission?.paymentStatus).toBe("PROOF_RECEIVED");
+
+    const variantAfterResubmission = await prisma.productVariant.findUnique({
+      where: { id: testVariantId },
+    });
+    expect(variantAfterResubmission?.stock).toBe(10);
+    expect(variantAfterResubmission?.reservedStock).toBe(2);
+  });
+
   it("refuses local-disk payment-proof uploads on Vercel", async () => {
     const previousVercel = process.env.VERCEL;
     process.env.VERCEL = "1";

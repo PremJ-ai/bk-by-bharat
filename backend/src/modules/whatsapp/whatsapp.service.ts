@@ -599,9 +599,9 @@ export class WhatsAppService {
     reason: string;
   }) {
     const text =
-      "Namaste " + order.customerName + ",\\n\\n" +
-      "The payment proof submitted for Order " + order.orderNumber + " could not be verified.\\n\\n" +
-      "Reason: " + order.reason + "\\n\\n" +
+      "Namaste " + order.customerName + ",\n\n" +
+      "The payment proof submitted for Order " + order.orderNumber + " could not be verified.\n\n" +
+      "Reason: " + order.reason + "\n\n" +
       "Please open the secure order-confirmation link from your original order message and submit a corrected screenshot and UTR. Your stock reservation is being held while you correct the proof.";
 
     return this.sendOutboundMessage({
