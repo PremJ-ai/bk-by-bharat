@@ -1,6 +1,7 @@
 import express, { type Application } from "express";
+import { createRequire } from "node:module";
 import path from "node:path";
-import * as helmetModule from "helmet";
+import type helmetFactory from "helmet";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { env } from "./config/env.js";
@@ -11,6 +12,9 @@ import { errorHandler } from "./middleware/error-handler.js";
 import { v1Router } from "./routes/v1.js";
 import { checkDatabaseConnection } from "./db/prisma.js";
 
+const require = createRequire(import.meta.url);
+const helmet = require("helmet") as typeof helmetFactory;
+
 export function createApp(): Application {
   const app = express();
 
@@ -20,7 +24,7 @@ export function createApp(): Application {
   }
 
   // Security headers
-  app.use(helmetModule.default());
+  app.use(helmet());
 
   // CORS configuration
   app.use(
