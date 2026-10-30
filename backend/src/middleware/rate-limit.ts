@@ -1,4 +1,4 @@
-import rateLimit from "express-rate-limit";
+import { rateLimit } from "express-rate-limit";
 import {
   RATE_LIMIT_LOGIN_WINDOW_MS,
   RATE_LIMIT_LOGIN_MAX,
