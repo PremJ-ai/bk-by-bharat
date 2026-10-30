@@ -25,7 +25,8 @@ const createMediaUploadUrlSchema = z.object({
 
 const uploadMediaSchema = z.object({
   fileName: z.string().min(1),
-  mimeType: z.enum(["image/jpeg", "image/png", "image/webp", "image/avif"]),
+  // Keep this as a string so MediaService can return the specific unsupported-format message.
+  mimeType: z.string().min(1),
   storageKey: z.string().trim().min(1).optional(),
   fileSizeBytes: z.number().int().positive().max(10 * 1024 * 1024).optional(),
   fileBase64: z.string().optional(),
