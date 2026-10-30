@@ -34,6 +34,7 @@ Set these in the backend Vercel project (Production and Preview only as appropri
 - SUPABASE_URL: Supabase project URL
 - SUPABASE_SERVICE_ROLE_KEY: service-role secret; backend only, never a NEXT_PUBLIC_ variable
 - PAYMENT_PROOFS_BUCKET=payment-proofs
+- SUPABASE_PUBLIC_MEDIA_BUCKET=product-media
 
 Add Meta WhatsApp variables only after the WhatsApp Business Cloud API is configured:
 
@@ -41,6 +42,8 @@ Add Meta WhatsApp variables only after the WhatsApp Business Cloud API is config
 - META_WHATSAPP_PHONE_ID
 - WHATSAPP_APP_SECRET
 - WHATSAPP_VERIFY_TOKEN
+
+The current provider code sends free-form text messages. For business-initiated messages outside Meta's customer-service window, an approved WhatsApp template is required; template payload support and approved template names still need to be configured and tested. Until then, treat WhatsApp provider events as locally recorded or best-effort notifications, not as a verified delivery channel.
 
 Do not set PORT for Vercel. It is used by the local Express server only.
 
@@ -63,6 +66,8 @@ The application creates short-lived signed upload URLs and uploads screenshots d
 - Allowed MIME types: image/jpeg, image/png, image/webp, image/avif
 
 The admin panel requests a signed upload ticket from the authenticated backend, uploads the image directly to this bucket, and asks the backend to verify and register the completed media asset. Only the backend's service-role key can issue upload tickets.
+
+**Important:** AI image generation remains disabled on Vercel until generated output is persisted to Supabase Storage. Admins can upload approved product images using the direct upload workflow above, or supply an existing image URL through the product editor.
 
 Never make the payment-proofs bucket public.
 
