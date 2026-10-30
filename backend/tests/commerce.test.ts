@@ -3,6 +3,8 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import argon2 from "argon2";
+import crypto from "node:crypto";
+import { CommerceService } from "../src/modules/commerce/commerce.service.js";
 
 const app = createApp();
 
@@ -102,9 +104,9 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
   });
 
   // ---------------------------------------------------------------------------
-  // 1. Guest Checkout Flow
+  // 1. Guest Checkout Flow & WhatsApp Consent Verification
   // ---------------------------------------------------------------------------
-  it("rejects guest checkout without WhatsApp consent", async () => {
+  it("rejects guest checkout when WhatsApp consent is explicitly false", async () => {
     const res = await request(app)
       .post("/api/v1/orders/checkout")
       .send({
@@ -120,6 +122,49 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
 
     expect(res.status).toBe(400);
     expect(JSON.stringify(res.body.error)).toContain("WhatsApp");
+  });
+
+  it("rejects guest checkout when WhatsApp consent field is missing", async () => {
+    const res = await request(app)
+      .post("/api/v1/orders/checkout")
+      .send({
+        customerName: "Aarav Sharma",
+        whatsappNumber: "+919876543210",
+        addressLine1: "42 Lodhi Estate",
+        city: "New Delhi",
+        stateRegion: "Delhi",
+        postalCode: "110003",
+        // whatsappConsent omitted
+        items: [{ variantId: testVariantId, quantity: 1 }],
+      });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body.error)).toContain("WhatsApp");
+  });
+
+  it("ensures consent timestamp is null when explicit consent is not recorded", async () => {
+    const rawToken = "test_raw_token_no_consent_" + Date.now();
+    const guestTokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const testOrder = await prisma.order.create({
+      data: {
+        orderNumber: `ORD-TEST-NOCONSENT-${Date.now()}`,
+        customerName: "Offline Patron",
+        whatsappNumber: "+919876543210",
+        addressLine1: "42 Lodhi Estate",
+        city: "New Delhi",
+        stateRegion: "Delhi",
+        postalCode: "110003",
+        whatsappConsent: false,
+        whatsappConsentAt: null,
+        guestTokenHash,
+        subtotalPaise: 500000,
+        totalPaise: 500000,
+      },
+    });
+
+    expect(testOrder.whatsappConsent).toBe(false);
+    expect(testOrder.whatsappConsentAt).toBeNull();
+    await prisma.order.delete({ where: { id: testOrder.id } });
   });
 
   it("rejects guest checkout with invalid WhatsApp number format", async () => {
@@ -139,7 +184,7 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     expect(res.status).toBe(400);
   });
 
-  it("successfully creates a guest order in AWAITING_ADMIN_REVIEW with opaque token", async () => {
+  it("successfully creates a guest order in AWAITING_ADMIN_REVIEW with explicit consent and timestamp", async () => {
     const res = await request(app)
       .post("/api/v1/orders/checkout")
       .send({
@@ -166,7 +211,7 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     guestToken = res.body.data.guestStatusToken;
     orderNumber = res.body.data.orderNumber;
 
-    // Verify order in database
+    // Verify order in database and timestamp consistency
     const dbOrder = await prisma.order.findUnique({
       where: { orderNumber },
       include: { items: true },
@@ -174,6 +219,9 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     expect(dbOrder).toBeDefined();
     orderId = dbOrder!.id;
     expect(dbOrder?.customerName).toBe("Aarav Sharma");
+    expect(dbOrder?.whatsappConsent).toBe(true);
+    expect(dbOrder?.whatsappConsentAt).toBeInstanceOf(Date);
+    expect(Math.abs(dbOrder!.whatsappConsentAt!.getTime() - dbOrder!.createdAt.getTime())).toBeLessThan(10000);
     expect(dbOrder?.items).toHaveLength(1);
     expect(dbOrder?.items[0].quantity).toBe(2);
 
@@ -196,8 +244,8 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     expect(res.body.data.orderNumber).toBe(orderNumber);
     expect(res.body.data.status).toBe("AWAITING_ADMIN_REVIEW");
     expect(res.body.data.items).toHaveLength(1);
-    expect(res.body.data.paymentDetails).toBeDefined();
-    expect(res.body.data.paymentDetails.upiId).toBe("atelier@bharat.upi");
+    expect(res.body.data.whatsappConsent).toBe(true);
+    expect(res.body.data.whatsappConsentAt).toBeDefined();
   });
 
   it("rejects guest status retrieval with an invalid token", async () => {
@@ -208,9 +256,72 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
   });
 
   // ---------------------------------------------------------------------------
-  // 3. Admin Invoicing & Stock Reservation
+  // 3. Store Settings & Invoicing Hardening
   // ---------------------------------------------------------------------------
-  it("allows admin to issue a final verified invoice and atomically reserve stock", async () => {
+  it("rejects issuing an invoice when store settings have placeholder credentials", async () => {
+    await prisma.storeSettings.upsert({
+      where: { id: "default" },
+      update: {
+        upiId: "atelier@bharat.upi",
+        payeeName: "Bharat Atelier New Delhi",
+        whatsappNumber: "+919876543210",
+      },
+      create: {
+        id: "default",
+        upiId: "atelier@bharat.upi",
+        payeeName: "Bharat Atelier New Delhi",
+        whatsappNumber: "+919876543210",
+      },
+    });
+
+    const res = await request(app)
+      .post(`/api/v1/admin/orders/${orderId}/invoice`)
+      .set("Cookie", adminCookie)
+      .send({
+        shippingPaise: 0,
+        taxPaise: 85000,
+        discountPaise: 50000,
+        paymentHoldHours: 24,
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/placeholder/i);
+  });
+
+  it("rejects configuring placeholder payment credentials through admin settings", async () => {
+    const res = await request(app)
+      .put("/api/v1/admin/settings/payment")
+      .set("Cookie", adminCookie)
+      .send({
+        upiId: "atelier@bharat.upi",
+        payeeName: "Bharat Atelier New Delhi",
+        paymentInstructions: "Scan QR using any UPI app to pay",
+        whatsappNumber: "+919876543210",
+        shippingDefaultPaise: 0,
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/placeholder/i);
+  });
+
+  it("configures genuine business payment credentials through protected admin route", async () => {
+    const res = await request(app)
+      .put("/api/v1/admin/settings/payment")
+      .set("Cookie", adminCookie)
+      .send({
+        upiId: "bharatatelier@icici",
+        payeeName: "Bharat Atelier Private Limited",
+        paymentInstructions: "Scan QR using any UPI app (GPay, PhonePe, Paytm). Confirm order reference in remarks.",
+        whatsappNumber: "+919810012345",
+        shippingDefaultPaise: 0,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.upiId).toBe("bharatatelier@icici");
+    expect(res.body.data.payeeName).toBe("Bharat Atelier Private Limited");
+  });
+
+  it("allows admin to issue a final verified invoice and atomically reserve stock once settings are configured", async () => {
     const res = await request(app)
       .post(`/api/v1/admin/orders/${orderId}/invoice`)
       .set("Cookie", adminCookie)
@@ -236,9 +347,9 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
   });
 
   // ---------------------------------------------------------------------------
-  // 4. Payment Proof Submission
+  // 4. Payment Proof Submission & Protected Retrieval
   // ---------------------------------------------------------------------------
-  it("allows guest to upload payment proof screenshot and UTR reference", async () => {
+  it("allows guest to upload payment proof screenshot and verifies protected retrieval", async () => {
     const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
     const res = await request(app)
@@ -254,11 +365,58 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     expect(res.status).toBe(201);
     expect(res.body.data.status).toBe("PENDING_REVIEW");
     expect(res.body.data.transactionReference).toBe("UPI/324198274192/Paytm");
+    expect(res.body.data.url).toMatch(/^\/api\/v1\/orders\/proofs\/.+\/file$/);
+
+    const proofUrl = res.body.data.url;
 
     // CRITICAL: Proof upload must NEVER mark the order PAID!
     const dbOrder = await prisma.order.findUnique({ where: { id: orderId } });
     expect(dbOrder?.status).toBe("PAYMENT_PROOF_RECEIVED");
     expect(dbOrder?.status).not.toBe("PAID");
+
+    // 1. Verify direct public static URL access is rejected with 403 Forbidden
+    const staticRes = await request(app).get("/uploads/proofs/some-proof.jpg");
+    expect(staticRes.status).toBe(403);
+    expect(staticRes.body.error.code).toBe("FORBIDDEN");
+
+    // 2. Verify unauthorized access to protected retrieval endpoint is rejected with 401
+    const unauthRes = await request(app).get(proofUrl);
+    expect(unauthRes.status).toBe(401);
+
+    // 3. Verify access with invalid guest token is rejected with 403
+    const forbiddenRes = await request(app).get(`${proofUrl}?token=invalid_guest_token_1234567890`);
+    expect(forbiddenRes.status).toBe(403);
+
+    // 4. Verify access with valid guest token succeeds with 200
+    const guestRes = await request(app).get(`${proofUrl}?token=${guestToken}`);
+    expect(guestRes.status).toBe(200);
+    expect(guestRes.headers["content-type"]).toContain("image/png");
+
+    // 5. Verify access with admin session cookie succeeds with 200
+    const adminRes = await request(app).get(proofUrl).set("Cookie", adminCookie);
+    expect(adminRes.status).toBe(200);
+    expect(adminRes.headers["content-type"]).toContain("image/png");
+  });
+
+  it("refuses local-disk payment-proof uploads on Vercel", async () => {
+    const previousVercel = process.env.VERCEL;
+    process.env.VERCEL = "1";
+
+    try {
+      await expect(
+        new CommerceService().submitPaymentProof({
+          token: "test_guest_status_token",
+          mimeType: "image/png",
+          fileBase64: "aW1hZ2U=",
+        })
+      ).rejects.toMatchObject({ statusCode: 503 });
+    } finally {
+      if (previousVercel === undefined) {
+        delete process.env.VERCEL;
+      } else {
+        process.env.VERCEL = previousVercel;
+      }
+    }
   });
 
   // ---------------------------------------------------------------------------
@@ -314,11 +472,18 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     expect(dbOrder?.fulfillmentStatus).toBe("SHIPPED");
 
     // Verify WhatsApp shipment dispatch message
-    const wam = await prisma.whatsAppMessage.findFirst({
-      where: { orderId, templateName: "order_shipped" },
-    });
-    expect(wam).toBeDefined();
-    expect(wam?.bodyText).toContain("Blue Dart Express");
+    await expect
+      .poll(
+        async () => {
+          const message = await prisma.whatsAppMessage.findFirst({
+            where: { orderId, templateName: "order_shipped" },
+            select: { bodyText: true },
+          });
+          return message?.bodyText;
+        },
+        { timeout: 5000 }
+      )
+      .toContain("Blue Dart Express");
   });
 
   // ---------------------------------------------------------------------------
@@ -378,5 +543,203 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     await prisma.cancellationRequest.deleteMany({ where: { orderId: cancelOrderId } });
     await prisma.orderItem.deleteMany({ where: { orderId: cancelOrderId } });
     await prisma.order.deleteMany({ where: { id: cancelOrderId } });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 8. Paid Order Cancellation & Stock Restoration
+  // ---------------------------------------------------------------------------
+  it("handles cancellation request for a paid order, restores physical stock on admin approval", async () => {
+    // 1. Create paid order
+    const checkoutRes = await request(app)
+      .post("/api/v1/orders/checkout")
+      .send({
+        customerName: "Devendra Singhal",
+        whatsappNumber: "+919988776655",
+        addressLine1: "44 Civil Lines",
+        city: "Jaipur",
+        stateRegion: "Rajasthan",
+        postalCode: "302006",
+        whatsappConsent: true,
+        items: [{ variantId: testVariantId, quantity: 2 }],
+      });
+
+    const paidToken = checkoutRes.body.data.guestStatusToken;
+    const paidOrderId = (await prisma.order.findUnique({
+      where: { orderNumber: checkoutRes.body.data.orderNumber },
+    }))!.id;
+
+    // Issue invoice (reservedStock += 2)
+    await request(app)
+      .post(`/api/v1/admin/orders/${paidOrderId}/invoice`)
+      .set("Cookie", adminCookie)
+      .send({ shippingPaise: 0 });
+
+    // Verify payment (stock -= 2, reservedStock -= 2)
+    const stockBeforePayment = (await prisma.productVariant.findUnique({ where: { id: testVariantId } }))!.stock;
+    await request(app)
+      .post(`/api/v1/admin/orders/${paidOrderId}/verify-payment`)
+      .set("Cookie", adminCookie)
+      .send({ utrReference: "UTR-TEST-CANCEL-RESTORE-1" });
+
+    const stockAfterPayment = (await prisma.productVariant.findUnique({ where: { id: testVariantId } }))!.stock;
+    expect(stockAfterPayment).toBe(stockBeforePayment - 2);
+
+    // 2. Guest requests cancellation on private status page
+    const cancelReqRes = await request(app)
+      .post("/api/v1/orders/cancel")
+      .send({
+        token: paidToken,
+        reason: "Traveling abroad, cannot receive delivery",
+      });
+
+    expect(cancelReqRes.status).toBe(200);
+    expect(cancelReqRes.body.data.status).toBe("CANCELLATION_REQUESTED");
+
+    // Stock should NOT be restored yet (admin has not approved)
+    const stockDuringReview = (await prisma.productVariant.findUnique({ where: { id: testVariantId } }))!.stock;
+    expect(stockDuringReview).toBe(stockAfterPayment);
+
+    // 3. Admin approves cancellation
+    const decisionRes = await request(app)
+      .post(`/api/v1/admin/orders/${paidOrderId}/cancellation-decision`)
+      .set("Cookie", adminCookie)
+      .send({
+        decision: "APPROVED",
+        reason: "Cancellation granted before cutting initiated",
+      });
+
+    expect(decisionRes.status).toBe(200);
+    expect(decisionRes.body.data.status).toBe("REFUND_REQUESTED");
+
+    // 4. Physical stock MUST be restored!
+    const stockAfterApproval = (await prisma.productVariant.findUnique({ where: { id: testVariantId } }))!.stock;
+    expect(stockAfterApproval).toBe(stockBeforePayment);
+
+    // -------------------------------------------------------------------------
+    // 9. Admin Manual Refund Processing & Ledger Audit
+    // -------------------------------------------------------------------------
+    const refundRes = await request(app)
+      .post(`/api/v1/admin/orders/${paidOrderId}/refund`)
+      .set("Cookie", adminCookie)
+      .send({
+        refundAmountPaise: checkoutRes.body.data.totalPaise,
+        refundReference: "UTR-REFUND-BANK-SUCCESS-998",
+        reason: "Full refund to patron UPI account following approved cancellation",
+      });
+
+    expect(refundRes.status).toBe(200);
+    expect(refundRes.body.data.order.status).toBe("REFUNDED");
+    expect(refundRes.body.data.order.paymentStatus).toBe("REFUNDED");
+    expect(refundRes.body.data.refundRecord.status).toBe("COMPLETED");
+    expect(refundRes.body.data.refundRecord.transactionReference).toBe("UTR-REFUND-BANK-SUCCESS-998");
+
+    // Verify inventory was NOT double-restored
+    const stockAfterRefund = (await prisma.productVariant.findUnique({ where: { id: testVariantId } }))!.stock;
+    expect(stockAfterRefund).toBe(stockBeforePayment);
+
+    // Verify duplicate / excessive refund is rejected
+    const overRefundRes = await request(app)
+      .post(`/api/v1/admin/orders/${paidOrderId}/refund`)
+      .set("Cookie", adminCookie)
+      .send({
+        refundAmountPaise: 1000,
+        refundReference: "UTR-OVER-REFUND",
+        reason: "Duplicate attempt",
+      });
+
+    expect(overRefundRes.status).toBe(400);
+    expect(overRefundRes.body.error.message).toContain("is not eligible for refund");
+
+    // Clean up
+    await prisma.refundRecord.deleteMany({ where: { orderId: paidOrderId } });
+    await prisma.cancellationRequest.deleteMany({ where: { orderId: paidOrderId } });
+    await prisma.paymentProof.deleteMany({ where: { orderId: paidOrderId } });
+    await prisma.invoice.deleteMany({ where: { orderId: paidOrderId } });
+    await prisma.orderItem.deleteMany({ where: { orderId: paidOrderId } });
+    await prisma.order.deleteMany({ where: { id: paidOrderId } });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 10. WhatsApp Webhook Handshake & Provider Status
+  // ---------------------------------------------------------------------------
+  it("supports Meta WhatsApp webhook challenge verification and provider status report", async () => {
+    const previousVerifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+    process.env.WHATSAPP_VERIFY_TOKEN = "test-webhook-verification-token";
+
+    // 1. Valid handshake
+    try {
+      const validHandshake = await request(app)
+        .get("/api/v1/whatsapp/webhook")
+        .query({
+          "hub.mode": "subscribe",
+          "hub.verify_token": process.env.WHATSAPP_VERIFY_TOKEN,
+          "hub.challenge": "challenge_code_98234",
+        });
+
+      expect(validHandshake.status).toBe(200);
+      expect(validHandshake.text).toBe("challenge_code_98234");
+
+      // 2. Invalid handshake
+      const invalidHandshake = await request(app)
+        .get("/api/v1/whatsapp/webhook")
+        .query({
+          "hub.mode": "subscribe",
+          "hub.verify_token": "wrong_token",
+          "hub.challenge": "challenge_code_98234",
+        });
+
+      expect(invalidHandshake.status).toBe(403);
+
+      // 3. Provider status inspection
+      const statusRes = await request(app).get("/api/v1/whatsapp/provider-status");
+      expect(statusRes.status).toBe(200);
+      expect(statusRes.body.data.providerName).toBeDefined();
+      expect(statusRes.body.data.isLiveConnected).toBe(false); // Accurately reports test adapter in local environment
+    } finally {
+      if (previousVerifyToken === undefined) {
+        delete process.env.WHATSAPP_VERIFY_TOKEN;
+      } else {
+        process.env.WHATSAPP_VERIFY_TOKEN = previousVerifyToken;
+      }
+    }
+
+    const configuredToken = process.env.WHATSAPP_VERIFY_TOKEN;
+    delete process.env.WHATSAPP_VERIFY_TOKEN;
+    try {
+      const missingTokenHandshake = await request(app)
+        .get("/api/v1/whatsapp/webhook")
+        .query({
+          "hub.mode": "subscribe",
+          "hub.verify_token": "known-default-must-not-be-accepted",
+          "hub.challenge": "challenge_code_98234",
+        });
+      expect(missingTokenHandshake.status).toBe(403);
+    } finally {
+      if (configuredToken !== undefined) {
+        process.env.WHATSAPP_VERIFY_TOKEN = configuredToken;
+      }
+    }
+
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousAppSecret = process.env.WHATSAPP_APP_SECRET;
+    process.env.NODE_ENV = "production";
+    delete process.env.WHATSAPP_APP_SECRET;
+    try {
+      const unsignedWebhook = await request(app)
+        .post("/api/v1/whatsapp/webhook")
+        .send({ senderPhone: "+919876543210", messageText: "STATUS" });
+      expect(unsignedWebhook.status).toBe(401);
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+      if (previousAppSecret === undefined) {
+        delete process.env.WHATSAPP_APP_SECRET;
+      } else {
+        process.env.WHATSAPP_APP_SECRET = previousAppSecret;
+      }
+    }
   });
 });

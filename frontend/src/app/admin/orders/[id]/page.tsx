@@ -8,6 +8,8 @@ import {
   issueAdminInvoice,
   verifyAdminPayment,
   shipAdminOrder,
+  decideAdminCancellation,
+  processAdminRefund,
 } from "@/lib/api/commerce";
 import {
   ArrowLeft,
@@ -55,6 +57,16 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
   const [trackingNumber, setTrackingNumber] = useState("");
   const [trackingUrl, setTrackingUrl] = useState("");
   const [isShipping, setIsShipping] = useState(false);
+
+  // Cancellation Decision State
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [isDecidingCancellation, setIsDecidingCancellation] = useState(false);
+
+  // Refund Processing State
+  const [refundRupees, setRefundRupees] = useState("");
+  const [refundUtr, setRefundUtr] = useState("");
+  const [refundReason, setRefundReason] = useState("Manual refund to original payment source");
+  const [isProcessingRefund, setIsProcessingRefund] = useState(false);
 
   const loadOrderDetail = async () => {
     try {
@@ -163,6 +175,52 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
       setFeedback({ type: "error", message: err?.message || "Failed to dispatch shipment." });
     } finally {
       setIsShipping(false);
+    }
+  };
+
+  const handleCancellationDecision = async (decision: "APPROVED" | "REJECTED") => {
+    try {
+      setIsDecidingCancellation(true);
+      setFeedback(null);
+      await decideAdminCancellation(orderId, {
+        decision,
+        reason: cancellationReason.trim() || undefined,
+      });
+      setFeedback({
+        type: "success",
+        message: `Cancellation request ${decision.toLowerCase()} successfully.`,
+      });
+      setCancellationReason("");
+      await loadOrderDetail();
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err?.message || "Failed to submit cancellation decision." });
+    } finally {
+      setIsDecidingCancellation(false);
+    }
+  };
+
+  const handleProcessRefund = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsProcessingRefund(true);
+      setFeedback(null);
+      const refundAmountPaise = Math.round(parseFloat(refundRupees) * 100);
+      await processAdminRefund(orderId, {
+        refundAmountPaise,
+        refundReference: refundUtr.trim(),
+        reason: refundReason.trim(),
+      });
+      setFeedback({
+        type: "success",
+        message: "Manual refund recorded and ledger updated.",
+      });
+      setRefundRupees("");
+      setRefundUtr("");
+      await loadOrderDetail();
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err?.message || "Failed to process refund." });
+    } finally {
+      setIsProcessingRefund(false);
     }
   };
 
@@ -348,6 +406,66 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
                         </a>
                       </div>
                     )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Section 4: Cancellation Requests & Refund Records */}
+          <div className="bg-surface border border-border p-6 space-y-4">
+            <h2 className="text-xs uppercase tracking-caps text-muted font-semibold pb-2 border-b border-border flex items-center justify-between">
+              <span>Cancellation &amp; Refund Ledger</span>
+              <span className="text-[10px] text-muted">
+                {(order.cancellationRequests?.length || 0) + (order.refundRecords?.length || 0)} event(s)
+              </span>
+            </h2>
+
+            {order.cancellationRequests?.length === 0 && (!order.refundRecords || order.refundRecords.length === 0) ? (
+              <p className="text-xs text-muted py-2">No cancellation or refund events on record.</p>
+            ) : (
+              <div className="space-y-3">
+                {order.cancellationRequests?.map((c: any) => (
+                  <div key={c.id} className="p-3 bg-canvas border border-border space-y-1 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-ink">
+                        Cancellation Request ({c.source})
+                      </span>
+                      <span
+                        className={`text-[10px] uppercase font-semibold px-2 py-0.5 rounded ${
+                          c.status === "APPROVED"
+                            ? "bg-stock-ok/10 text-stock-ok"
+                            : c.status === "REJECTED"
+                            ? "bg-crimson/10 text-crimson"
+                            : "bg-gold/10 text-gold"
+                        }`}
+                      >
+                        {c.status}
+                      </span>
+                    </div>
+                    <p className="text-muted text-[11px]">{c.reason}</p>
+                    <span className="text-[10px] text-muted/70 block">
+                      {new Date(c.createdAt).toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                ))}
+
+                {order.refundRecords?.map((r: any) => (
+                  <div key={r.id} className="p-3 bg-canvas border border-border space-y-1 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-ink">
+                        Refund: {formatINR(r.amountPaise)}
+                      </span>
+                      <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-stock-ok/10 text-stock-ok">
+                        {r.status}
+                      </span>
+                    </div>
+                    <p className="text-muted text-[11px]">
+                      UTR: <span className="font-mono text-ink">{r.transactionReference}</span> &middot; {r.reason}
+                    </p>
+                    <span className="text-[10px] text-muted/70 block">
+                      {new Date(r.processedAt || r.createdAt).toLocaleString("en-IN")}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -555,6 +673,139 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
               </button>
             </form>
           </div>
+
+          {/* Action 4: Cancellation Request Review */}
+          {(order.status === "CANCELLATION_REQUESTED" ||
+            order.cancellationRequests?.some((c: any) => c.status === "PENDING")) && (
+            <div className="bg-surface border-2 border-gold/60 p-6 space-y-4">
+              <div className="border-b border-border pb-3">
+                <span className="text-[10px] uppercase tracking-caps text-gold font-semibold">
+                  Action Required
+                </span>
+                <h3 className="font-display text-lg text-ink font-normal">
+                  Review Cancellation Request
+                </h3>
+              </div>
+
+              <div className="bg-canvas border border-border p-3 space-y-1 text-xs">
+                <span className="text-[11px] text-muted block">Patron Reason:</span>
+                <p className="text-ink font-medium">
+                  {order.cancellationRequests?.find((c: any) => c.status === "PENDING")?.reason || "Customer requested cancellation."}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="text-[11px] uppercase tracking-caps text-muted block mb-1">
+                    Decision Remarks
+                  </label>
+                  <input
+                    type="text"
+                    value={cancellationReason}
+                    onChange={(e) => setCancellationReason(e.target.value)}
+                    placeholder="e.g. Sizing cancelled before fabric cut"
+                    className="w-full bg-canvas border border-border p-2 text-xs text-ink focus:border-gold focus:outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    disabled={isDecidingCancellation}
+                    onClick={() => handleCancellationDecision("APPROVED")}
+                    className="w-full bg-stock-ok hover:bg-stock-ok/90 text-white py-2 text-xs uppercase tracking-caps font-semibold flex items-center justify-center space-x-1 transition-colors disabled:opacity-50"
+                  >
+                    {isDecidingCancellation ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    <span>Approve &amp; Restock</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isDecidingCancellation}
+                    onClick={() => handleCancellationDecision("REJECTED")}
+                    className="w-full bg-crimson hover:bg-crimson/90 text-white py-2 text-xs uppercase tracking-caps font-semibold flex items-center justify-center space-x-1 transition-colors disabled:opacity-50"
+                  >
+                    <span>Reject Request</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Action 5: Manual Bank/UPI Refund Processing */}
+          {(order.status === "REFUND_REQUESTED" ||
+            order.status === "CANCELLED" ||
+            order.paymentStatus === "VERIFIED" ||
+            order.status === "PAID") &&
+            order.status !== "REFUNDED" && (
+            <div className="bg-surface border border-border p-6 space-y-4">
+              <div className="border-b border-border pb-3">
+                <span className="text-[10px] uppercase tracking-caps text-gold font-semibold">
+                  Finance Ledger
+                </span>
+                <h3 className="font-display text-lg text-ink font-normal">
+                  Record Manual Refund
+                </h3>
+              </div>
+
+              <form onSubmit={handleProcessRefund} className="space-y-3">
+                <div>
+                  <label className="text-[11px] uppercase tracking-caps text-muted block mb-1">
+                    Refund Amount (INR) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="1"
+                    value={refundRupees}
+                    onChange={(e) => setRefundRupees(e.target.value)}
+                    placeholder={`Max: ${Math.round(order.totalPaise / 100)}`}
+                    className="w-full bg-canvas border border-border p-2 text-xs text-ink font-mono focus:border-gold focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] uppercase tracking-caps text-muted block mb-1">
+                    Bank UTR / Transfer Reference *
+                  </label>
+                  <input
+                    type="text"
+                    value={refundUtr}
+                    onChange={(e) => setRefundUtr(e.target.value)}
+                    placeholder="e.g. HDFC-REFUND-991203"
+                    className="w-full bg-canvas border border-border p-2 text-xs text-ink font-mono focus:border-gold focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] uppercase tracking-caps text-muted block mb-1">
+                    Refund Reason *
+                  </label>
+                  <input
+                    type="text"
+                    value={refundReason}
+                    onChange={(e) => setRefundReason(e.target.value)}
+                    className="w-full bg-canvas border border-border p-2 text-xs text-ink focus:border-gold focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isProcessingRefund}
+                  className="w-full bg-navy hover:bg-gold hover:text-navy text-canvas py-2.5 text-xs uppercase tracking-caps font-semibold flex items-center justify-center space-x-2 transition-colors disabled:opacity-50"
+                >
+                  {isProcessingRefund ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <DollarSign className="w-3.5 h-3.5" />
+                  )}
+                  <span>Record Transfer &amp; Notify Patron</span>
+                </button>
+              </form>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -54,3 +54,9 @@ export class RateLimitError extends AppError {
     super(429, "RATE_LIMIT_EXCEEDED", message);
   }
 }
+
+export class ServiceUnavailableError extends AppError {
+  constructor(message: string = "This service is temporarily unavailable.") {
+    super(503, "SERVICE_UNAVAILABLE", message);
+  }
+}

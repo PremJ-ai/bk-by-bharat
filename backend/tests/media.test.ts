@@ -3,6 +3,7 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import argon2 from "argon2";
+import { MediaService } from "../src/modules/media/media.service.js";
 
 const app = createApp();
 
@@ -146,6 +147,37 @@ describe("Milestone 5: Media Service and Admin Media Endpoints", () => {
     expect(res.body.data.source).toBe("UPLOADED");
     expect(res.body.data.url).toMatch(/^\/uploads\//);
     expect(res.body.data.fileSizeBytes).toBeGreaterThan(0);
+  });
+
+  it("refuses local-disk media operations on Vercel", async () => {
+    const previousVercel = process.env.VERCEL;
+    process.env.VERCEL = "1";
+    const service = new MediaService();
+
+    try {
+      await expect(
+        service.generateProductImageDraft({
+          productName: "TestMedia Garment",
+          material: "Linen",
+          categoryName: "shirts",
+        })
+      ).rejects.toMatchObject({ statusCode: 503 });
+
+      await expect(
+        service.uploadMedia({
+          fileName: "test.png",
+          mimeType: "image/png",
+          fileBase64: "aW1hZ2U=",
+          altText: "TestMedia Vercel upload",
+        })
+      ).rejects.toMatchObject({ statusCode: 503 });
+    } finally {
+      if (previousVercel === undefined) {
+        delete process.env.VERCEL;
+      } else {
+        process.env.VERCEL = previousVercel;
+      }
+    }
   });
 
   it("handles media reordering and setting primary media on a product", async () => {

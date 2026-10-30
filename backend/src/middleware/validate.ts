@@ -1,11 +1,11 @@
 import type { Request, Response, NextFunction } from "express";
-import { type AnyZodObject, ZodError } from "zod";
+import { type ZodType, ZodError } from "zod";
 import { ValidationError } from "../lib/errors.js";
 
 interface ValidationSchemas {
-  body?: AnyZodObject;
-  query?: AnyZodObject;
-  params?: AnyZodObject;
+  body?: ZodType;
+  query?: ZodType;
+  params?: ZodType;
 }
 
 export function validate(schemas: ValidationSchemas) {
@@ -15,10 +15,10 @@ export function validate(schemas: ValidationSchemas) {
         req.body = await schemas.body.parseAsync(req.body);
       }
       if (schemas.query) {
-        req.query = await schemas.query.parseAsync(req.query);
+        req.query = (await schemas.query.parseAsync(req.query)) as any;
       }
       if (schemas.params) {
-        req.params = await schemas.params.parseAsync(req.params);
+        req.params = (await schemas.params.parseAsync(req.params)) as any;
       }
       next();
     } catch (error) {
@@ -36,14 +36,14 @@ export function validate(schemas: ValidationSchemas) {
   };
 }
 
-export function validateBody(schema: AnyZodObject) {
+export function validateBody(schema: ZodType) {
   return validate({ body: schema });
 }
 
-export function validateQuery(schema: AnyZodObject) {
+export function validateQuery(schema: ZodType) {
   return validate({ query: schema });
 }
 
-export function validateParams(schema: AnyZodObject) {
+export function validateParams(schema: ZodType) {
   return validate({ params: schema });
 }

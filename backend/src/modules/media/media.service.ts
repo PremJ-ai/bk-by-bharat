@@ -3,7 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { prisma } from "../../db/prisma.js";
 import { getMediaGenerationProvider } from "./media.provider.js";
-import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { BadRequestError, NotFoundError, ServiceUnavailableError } from "../../lib/errors.js";
 
 const UPLOADS_DIR = path.resolve(process.cwd(), "uploads");
 
@@ -23,6 +23,12 @@ export class MediaService {
     productId?: string;
     idempotencyKey?: string;
   }) {
+    if (process.env.VERCEL === "1") {
+      throw new ServiceUnavailableError(
+        "Image generation is disabled until persistent media storage is configured for this deployment."
+      );
+    }
+
     const { productName, material, categoryName, productId } = options;
     const idempotencyKey = options.idempotencyKey || `gen-${Date.now()}-${crypto.randomBytes(8).toString("hex")}`;
 
@@ -93,6 +99,12 @@ export class MediaService {
     altText: string;
   }) {
     const { fileName, mimeType, fileBase64, url, altText } = options;
+
+    if (process.env.VERCEL === "1" && fileBase64) {
+      throw new ServiceUnavailableError(
+        "File uploads are disabled until persistent media storage is configured for this deployment."
+      );
+    }
 
     const allowedMimes = ["image/webp", "image/jpeg", "image/png", "image/avif"];
     if (!allowedMimes.includes(mimeType.toLowerCase())) {

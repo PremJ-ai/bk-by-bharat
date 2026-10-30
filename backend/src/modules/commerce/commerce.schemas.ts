@@ -14,9 +14,11 @@ export const guestCheckoutSchema = z.object({
   postalCode: z.string().trim().min(4, "Postal / ZIP code is required").max(12),
   country: z.string().trim().default("India"),
   deliveryNotes: z.string().trim().max(500).optional(),
-  whatsappConsent: z.boolean().refine((val) => val === true, {
-    message: "Consent to receive order updates via WhatsApp is required",
-  }),
+  whatsappConsent: z
+    .boolean({ error: "WhatsApp consent is required" })
+    .refine((val) => val === true, {
+      message: "Consent to receive order updates via WhatsApp is required",
+    }),
   items: z
     .array(
       z.object({
@@ -85,3 +87,19 @@ export const updatePaymentSettingsSchema = z.object({
 });
 
 export type UpdatePaymentSettingsInput = z.infer<typeof updatePaymentSettingsSchema>;
+
+export const adminCancellationDecisionSchema = z.object({
+  decision: z.enum(["APPROVED", "REJECTED"]),
+  reason: z.string().trim().max(500).optional(),
+});
+
+export type AdminCancellationDecisionInput = z.infer<typeof adminCancellationDecisionSchema>;
+
+export const processRefundSchema = z.object({
+  refundAmountPaise: z.number().int().min(1, "Refund amount must be greater than 0 paise"),
+  refundReference: z.string().trim().min(4, "Bank UTR or refund transaction reference is required"),
+  reason: z.string().trim().min(3, "Refund reason is required").max(500),
+  adminNotes: z.string().trim().max(500).optional(),
+});
+
+export type ProcessRefundInput = z.infer<typeof processRefundSchema>;

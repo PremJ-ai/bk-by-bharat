@@ -1,15 +1,25 @@
 import { PrismaClient } from "@prisma/client";
 import { logger } from "../lib/logger.js";
+import { env } from "../config/env.js";
 
 declare global {
   var prismaGlobal: PrismaClient | undefined;
 }
 
+if (env.NODE_ENV === "test" && env.DATABASE_URL.includes("supabase.com")) {
+  throw new Error("CRITICAL SAFETY BLOCK: Tests cannot be executed against production Supabase database!");
+}
+
 export const prisma =
   globalThis.prismaGlobal ??
   new PrismaClient({
+    datasources: {
+      db: {
+        url: env.DATABASE_URL,
+      },
+    },
     log:
-      process.env.NODE_ENV === "development"
+      env.NODE_ENV === "development"
         ? [
             { emit: "event", level: "error" },
             { emit: "event", level: "warn" },
@@ -17,7 +27,7 @@ export const prisma =
         : ["error"],
   });
 
-if (process.env.NODE_ENV !== "production") {
+if (env.NODE_ENV !== "production") {
   globalThis.prismaGlobal = prisma;
 }
 

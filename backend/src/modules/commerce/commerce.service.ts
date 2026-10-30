@@ -1,8 +1,16 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import path from "node:path";
 import { prisma } from "../../db/prisma.js";
-import { BadRequestError, NotFoundError, ConflictError } from "../../lib/errors.js";
+import {
+  BadRequestError,
+  NotFoundError,
+  ConflictError,
+  UnauthorizedError,
+  ForbiddenError,
+  ServiceUnavailableError,
+} from "../../lib/errors.js";
 import { WhatsAppService } from "../whatsapp/whatsapp.service.js";
 import type {
   GuestCheckoutInput,
@@ -11,6 +19,8 @@ import type {
   VerifyPaymentInput,
   CreateShipmentInput,
   UpdatePaymentSettingsInput,
+  AdminCancellationDecisionInput,
+  ProcessRefundInput,
 } from "./commerce.schemas.js";
 
 const PROOFS_DIR = path.resolve(process.cwd(), "uploads", "proofs");
@@ -44,6 +54,32 @@ export class CommerceService {
         shippingDefaultPaise: 0,
       },
     });
+  }
+
+  /**
+   * Helper to identify unconfigured / placeholder payment store credentials
+   */
+  isPlaceholderStoreSettings(settings: {
+    upiId?: string | null;
+    payeeName?: string | null;
+    whatsappNumber?: string | null;
+  }): boolean {
+    const placeholderUpiPatterns = [/atelier@bharat\.upi$/i, /@bharat\.upi$/i, /@example/i, /test@/i, /placeholder/i];
+    const placeholderPhonePatterns = [/^\+?919876543210$/, /^\+?910000000000$/, /^\+?911234567890$/];
+    const placeholderPayeePatterns = [/^Bharat Atelier New Delhi$/i, /placeholder/i, /test payee/i];
+
+    const upi = (settings.upiId || "").trim();
+    const payee = (settings.payeeName || "").trim();
+    const phone = (settings.whatsappNumber || "").trim();
+
+    return (
+      !upi ||
+      placeholderUpiPatterns.some((pattern) => pattern.test(upi)) ||
+      !payee ||
+      placeholderPayeePatterns.some((pattern) => pattern.test(payee)) ||
+      !phone ||
+      placeholderPhonePatterns.some((pattern) => pattern.test(phone))
+    );
   }
 
   /**
@@ -105,12 +141,18 @@ export class CommerceService {
       };
     });
 
-    // 2. Generate cryptographically random guest status token and human order number
+    // 2. Reject missing or false consent if required, and determine consent timestamp
+    if (input.whatsappConsent !== true) {
+      throw new BadRequestError("Consent to receive order updates via WhatsApp is required.");
+    }
+    const consentTimestamp = input.whatsappConsent === true ? new Date() : null;
+
+    // 3. Generate cryptographically random guest status token and human order number
     const rawToken = crypto.randomBytes(32).toString("hex");
     const guestTokenHash = this.hashToken(rawToken);
     const orderNumber = `ORD-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    // 3. Persist Order in database transaction
+    // 4. Persist Order in database transaction
     const order = await prisma.$transaction(async (tx) => {
       const newOrder = await tx.order.create({
         data: {
@@ -128,7 +170,8 @@ export class CommerceService {
           postalCode: input.postalCode,
           country: input.country || "India",
           deliveryNotes: input.deliveryNotes || null,
-          whatsappConsent: true,
+          whatsappConsent: input.whatsappConsent === true,
+          whatsappConsentAt: consentTimestamp,
           guestTokenHash,
           subtotalPaise,
           totalPaise: subtotalPaise,
@@ -144,7 +187,7 @@ export class CommerceService {
       return newOrder;
     });
 
-    // 4. Send asynchronous WhatsApp confirmation
+    // 5. Send asynchronous WhatsApp confirmation
     this.whatsappService
       .notifyOrderReceived({
         id: order.id,
@@ -164,6 +207,8 @@ export class CommerceService {
       totalPaise: order.totalPaise,
       currency: order.currency,
       itemsCount: order.items.length,
+      whatsappConsent: order.whatsappConsent,
+      whatsappConsentAt: order.whatsappConsentAt,
     };
   }
 
@@ -190,6 +235,9 @@ export class CommerceService {
           cancellationRequests: {
             orderBy: { createdAt: "desc" },
           },
+          refundRecords: {
+            orderBy: { createdAt: "desc" },
+          },
         },
       }),
       this.getStoreSettings(),
@@ -201,9 +249,12 @@ export class CommerceService {
 
     const currentInvoice = order.invoices[0] || null;
     const finalAmountInr = (order.totalPaise / 100).toFixed(2);
-    const upiDeepLink = `upi://pay?pa=${encodeURIComponent(settings.upiId)}&pn=${encodeURIComponent(
-      settings.payeeName
-    )}&am=${finalAmountInr}&cu=INR&tn=${encodeURIComponent(`Atelier ${order.orderNumber}`)}`;
+    const hasValidPaymentSettings = !this.isPlaceholderStoreSettings(settings);
+    const upiDeepLink = hasValidPaymentSettings
+      ? `upi://pay?pa=${encodeURIComponent(settings.upiId)}&pn=${encodeURIComponent(
+          settings.payeeName
+        )}&am=${finalAmountInr}&cu=INR&tn=${encodeURIComponent(`Atelier ${order.orderNumber}`)}`
+      : null;
 
     return {
       orderNumber: order.orderNumber,
@@ -212,6 +263,8 @@ export class CommerceService {
       fulfillmentStatus: order.fulfillmentStatus,
       customerName: order.customerName,
       whatsappNumber: order.whatsappNumber,
+      whatsappConsent: order.whatsappConsent,
+      whatsappConsentAt: order.whatsappConsentAt,
       email: order.email,
       shippingAddress: {
         line1: order.addressLine1,
@@ -276,6 +329,15 @@ export class CommerceService {
         reason: c.reason,
         createdAt: c.createdAt,
       })),
+      refundRecords: order.refundRecords.map((r) => ({
+        id: r.id,
+        amountPaise: r.amountPaise,
+        status: r.status,
+        reason: r.reason,
+        transactionReference: r.transactionReference,
+        processedAt: r.processedAt,
+        createdAt: r.createdAt,
+      })),
       paymentDetails: {
         upiId: settings.upiId,
         payeeName: settings.payeeName,
@@ -304,6 +366,12 @@ export class CommerceService {
     }
 
     const settings = await this.getStoreSettings();
+
+    if (this.isPlaceholderStoreSettings(settings)) {
+      throw new BadRequestError(
+        "Cannot issue payment invoice: Store payment settings contain placeholder credentials (UPI ID, Payee Name, or WhatsApp Number). Configure genuine business values in Admin Settings before requesting payment for real orders."
+      );
+    }
 
     // Calculate total
     const totalPaise = Math.max(
@@ -411,6 +479,12 @@ export class CommerceService {
    * Guest: Submit payment proof screenshot & UTR reference
    */
   async submitPaymentProof(input: SubmitPaymentProofInput) {
+    if (process.env.VERCEL === "1") {
+      throw new ServiceUnavailableError(
+        "Payment-proof uploads are unavailable until private persistent storage is configured."
+      );
+    }
+
     const guestTokenHash = this.hashToken(input.token);
     const order = await prisma.order.findUnique({
       where: { guestTokenHash },
@@ -443,7 +517,6 @@ export class CommerceService {
       fileSizeBytes = buffer.length;
       const diskPath = path.join(PROOFS_DIR, path.basename(storageKey));
       await fs.writeFile(diskPath, buffer);
-      finalUrl = `/uploads/proofs/${path.basename(storageKey)}`;
     } else if (!finalUrl) {
       throw new BadRequestError("Either fileBase64 or url must be provided.");
     }
@@ -454,13 +527,20 @@ export class CommerceService {
         data: {
           orderId: order.id,
           storageKey,
-          url: finalUrl!,
+          url: finalUrl || "pending",
           mimeType: input.mimeType || "image/jpeg",
           fileSizeBytes,
           status: "PENDING_REVIEW",
           transactionReference: input.transactionReference || null,
           adminNotes: input.notes || null,
         },
+      });
+
+      // Protected URL route for secure retrieval
+      const protectedUrl = `/api/v1/orders/proofs/${p.id}/file`;
+      const updatedProof = await tx.paymentProof.update({
+        where: { id: p.id },
+        data: { url: protectedUrl },
       });
 
       await tx.order.update({
@@ -471,7 +551,7 @@ export class CommerceService {
         },
       });
 
-      return p;
+      return updatedProof;
     });
 
     // Notify customer on WhatsApp acknowledging proof
@@ -634,6 +714,8 @@ export class CommerceService {
 
   /**
    * Guest: Request Cancellation
+   * Handles both immediate cancellation of unpaid orders and submission of review-gated
+   * cancellation requests for orders in payment-proof review or paid/processing states.
    */
   async cancelOrder(input: { token: string; reason: string }) {
     const guestTokenHash = this.hashToken(input.token);
@@ -646,47 +728,358 @@ export class CommerceService {
       throw new NotFoundError("Order not found or invalid token.");
     }
 
-    const cancellableStatuses = ["AWAITING_ADMIN_REVIEW", "AWAITING_CUSTOMER_PAYMENT"];
-    if (!cancellableStatuses.includes(order.status)) {
+    if (order.status === "SHIPPED" || order.status === "DELIVERED") {
       throw new BadRequestError(
-        `Order cannot be cancelled directly in status "${order.status}". Please contact atelier WhatsApp support.`
+        `Order ${order.orderNumber} has already been dispatched with our courier. Please contact atelier WhatsApp support to initiate a return or exchange.`
       );
     }
 
-    return prisma.$transaction(async (tx) => {
-      // If stock was reserved under payment hold, release it
-      if (order.status === "AWAITING_CUSTOMER_PAYMENT") {
-        for (const item of order.items) {
-          if (item.variantId) {
-            await tx.productVariant.update({
-              where: { id: item.variantId },
-              data: {
-                reservedStock: { decrement: item.quantity },
-              },
-            });
+    if (order.status === "CANCELLED" || order.status === "REFUNDED") {
+      throw new BadRequestError(`Order ${order.orderNumber} is already ${order.status.toLowerCase()}.`);
+    }
+
+    if (order.status === "CANCELLATION_REQUESTED") {
+      throw new BadRequestError("A cancellation request for this order is already under review by our atelier team.");
+    }
+
+    // Branch 1: Unpaid Orders (Auto-approved under policy; release reserved stock hold)
+    if (order.status === "AWAITING_ADMIN_REVIEW" || order.status === "AWAITING_CUSTOMER_PAYMENT") {
+      const updated = await prisma.$transaction(async (tx) => {
+        if (order.status === "AWAITING_CUSTOMER_PAYMENT") {
+          for (const item of order.items) {
+            if (item.variantId) {
+              await tx.productVariant.update({
+                where: { id: item.variantId },
+                data: {
+                  reservedStock: { decrement: item.quantity },
+                },
+              });
+            }
           }
         }
-      }
 
+        await tx.cancellationRequest.create({
+          data: {
+            orderId: order.id,
+            source: "WEBSITE",
+            reason: input.reason,
+            status: "APPROVED",
+          },
+        });
+
+        return tx.order.update({
+          where: { id: order.id },
+          data: {
+            status: "CANCELLED",
+            paymentHoldExpiresAt: null,
+          },
+        });
+      });
+
+      this.whatsappService
+        .notifyCancellationApproved({
+          id: order.id,
+          orderNumber: order.orderNumber,
+          customerName: order.customerName,
+          whatsappNumber: order.whatsappNumber,
+        })
+        .catch(() => {});
+
+      return updated;
+    }
+
+    // Branch 2: Paid, Processing, or Proof Under Review
+    // Must be routed to Admin Decision before cancelling or refunding
+    const updated = await prisma.$transaction(async (tx) => {
       await tx.cancellationRequest.create({
         data: {
           orderId: order.id,
           source: "WEBSITE",
           reason: input.reason,
-          status: "APPROVED",
+          status: "PENDING",
         },
       });
 
-      const updated = await tx.order.update({
+      return tx.order.update({
         where: { id: order.id },
         data: {
-          status: "CANCELLED",
-          paymentHoldExpiresAt: null,
+          status: "CANCELLATION_REQUESTED",
+        },
+      });
+    });
+
+    this.whatsappService
+      .notifyCancellationRequested({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        whatsappNumber: order.whatsappNumber,
+      })
+      .catch(() => {});
+
+    return updated;
+  }
+
+  /**
+   * Admin: Decide Cancellation Request (Approve or Reject)
+   * Restores variant inventory exactly once if order was previously paid and decremented.
+   */
+  async decideCancellation(
+    orderId: string,
+    adminId: string | undefined,
+    input: AdminCancellationDecisionInput
+  ) {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: true,
+        cancellationRequests: {
+          where: { status: "PENDING" },
+          orderBy: { createdAt: "desc" },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundError(`Order '${orderId}' not found.`);
+    }
+
+    if (order.status !== "CANCELLATION_REQUESTED" && order.cancellationRequests.length === 0) {
+      throw new BadRequestError(`Order '${order.orderNumber}' does not have a pending cancellation request.`);
+    }
+
+    const pendingRequest = order.cancellationRequests[0];
+
+    const updated = await prisma.$transaction(async (tx) => {
+      if (input.decision === "APPROVED") {
+        // If order was paid, physical inventory was decremented when payment was verified:
+        // Restore stock exactly once
+        if (order.paymentStatus === "VERIFIED") {
+          for (const item of order.items) {
+            if (item.variantId) {
+              await tx.productVariant.update({
+                where: { id: item.variantId },
+                data: {
+                  stock: { increment: item.quantity },
+                },
+              });
+            }
+          }
+        } else if (order.status === "AWAITING_CUSTOMER_PAYMENT" || order.status === "PAYMENT_PROOF_RECEIVED") {
+          // If only reserved stock hold was active, release reservedStock
+          for (const item of order.items) {
+            if (item.variantId) {
+              await tx.productVariant.update({
+                where: { id: item.variantId },
+                data: {
+                  reservedStock: { decrement: item.quantity },
+                },
+              });
+            }
+          }
+        }
+
+        if (pendingRequest) {
+          await tx.cancellationRequest.update({
+            where: { id: pendingRequest.id },
+            data: {
+              status: "APPROVED",
+              decidedByAdminId: adminId || null,
+              decidedAt: new Date(),
+            },
+          });
+        }
+
+        // If paid, route to REFUND_REQUESTED so staff knows to return funds; otherwise CANCELLED
+        const nextStatus = order.paymentStatus === "VERIFIED" ? "REFUND_REQUESTED" : "CANCELLED";
+
+        const ord = await tx.order.update({
+          where: { id: order.id },
+          data: {
+            status: nextStatus,
+            paymentHoldExpiresAt: null,
+          },
+        });
+
+        await tx.auditEvent.create({
+          data: {
+            actorAdminId: adminId || null,
+            action: "CANCELLATION_APPROVED",
+            resourceType: "Order",
+            resourceId: order.id,
+            details: { reason: input.reason, refundPending: order.paymentStatus === "VERIFIED" },
+          },
+        });
+
+        return ord;
+      } else {
+        // REJECTED: restore previous status
+        const revertedStatus = order.paymentStatus === "VERIFIED" ? "PAID" : "AWAITING_CUSTOMER_PAYMENT";
+
+        if (pendingRequest) {
+          await tx.cancellationRequest.update({
+            where: { id: pendingRequest.id },
+            data: {
+              status: "REJECTED",
+              decidedByAdminId: adminId || null,
+              decidedAt: new Date(),
+            },
+          });
+        }
+
+        const ord = await tx.order.update({
+          where: { id: order.id },
+          data: {
+            status: revertedStatus,
+          },
+        });
+
+        await tx.auditEvent.create({
+          data: {
+            actorAdminId: adminId || null,
+            action: "CANCELLATION_REJECTED",
+            resourceType: "Order",
+            resourceId: order.id,
+            details: { reason: input.reason },
+          },
+        });
+
+        return ord;
+      }
+    });
+
+    if (input.decision === "APPROVED") {
+      this.whatsappService
+        .notifyCancellationApproved({
+          id: order.id,
+          orderNumber: order.orderNumber,
+          customerName: order.customerName,
+          whatsappNumber: order.whatsappNumber,
+          refundPending: order.paymentStatus === "VERIFIED",
+        })
+        .catch(() => {});
+    } else {
+      this.whatsappService
+        .notifyCancellationRejected({
+          id: order.id,
+          orderNumber: order.orderNumber,
+          customerName: order.customerName,
+          whatsappNumber: order.whatsappNumber,
+          reason: input.reason,
+        })
+        .catch(() => {});
+    }
+
+    return updated;
+  }
+
+  /**
+   * Admin: Process Manual Bank/UPI Refund
+   * Records the verified UTR/transfer reference after the manual bank transfer has occurred.
+   * Strictly prevents duplicate refunds or amount overages. Does not double-release inventory.
+   */
+  async processRefund(
+    orderId: string,
+    adminId: string | undefined,
+    input: ProcessRefundInput
+  ) {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        refundRecords: {
+          where: { status: "COMPLETED" },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundError(`Order '${orderId}' not found.`);
+    }
+
+    const eligibleStatuses = [
+      "PAID",
+      "PROCESSING",
+      "SHIPPED",
+      "DELIVERED",
+      "CANCELLED",
+      "REFUND_REQUESTED",
+      "REFUND_PROCESSING",
+      "PARTIALLY_REFUNDED",
+    ];
+
+    if (!eligibleStatuses.includes(order.status)) {
+      throw new BadRequestError(`Order in status '${order.status}' is not eligible for refund.`);
+    }
+
+    const alreadyRefundedPaise = order.refundRecords.reduce((sum, r) => sum + r.amountPaise, 0);
+    const maxRefundablePaise = order.totalPaise - alreadyRefundedPaise;
+
+    if (input.refundAmountPaise > maxRefundablePaise) {
+      throw new BadRequestError(
+        `Refund amount of ₹${(input.refundAmountPaise / 100).toFixed(2)} exceeds remaining balance of ₹${(maxRefundablePaise / 100).toFixed(2)}.`
+      );
+    }
+
+    const isFullRefund = alreadyRefundedPaise + input.refundAmountPaise >= order.totalPaise;
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Create completed RefundRecord entry
+      const refundRecord = await tx.refundRecord.create({
+        data: {
+          orderId: order.id,
+          amountPaise: input.refundAmountPaise,
+          currency: order.currency,
+          status: "COMPLETED",
+          reason: input.reason,
+          source: "ADMIN",
+          adminNotes: input.adminNotes || null,
+          transactionReference: input.refundReference,
+          processedByAdminId: adminId || null,
+          processedAt: new Date(),
         },
       });
 
-      return updated;
+      // 2. Update Order status
+      const updatedOrder = await tx.order.update({
+        where: { id: order.id },
+        data: {
+          status: isFullRefund ? "REFUNDED" : "PARTIALLY_REFUNDED",
+          paymentStatus: isFullRefund ? "REFUNDED" : "VERIFIED",
+        },
+      });
+
+      // 3. Audit Event
+      await tx.auditEvent.create({
+        data: {
+          actorAdminId: adminId || null,
+          action: "ORDER_REFUNDED",
+          resourceType: "Order",
+          resourceId: order.id,
+          details: {
+            refundAmountPaise: input.refundAmountPaise,
+            refundReference: input.refundReference,
+            isFullRefund,
+            reason: input.reason,
+          },
+        },
+      });
+
+      return { refundRecord, order: updatedOrder };
     });
+
+    // Notify customer over WhatsApp
+    this.whatsappService
+      .notifyRefundCompleted({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        whatsappNumber: order.whatsappNumber,
+        refundAmountPaise: input.refundAmountPaise,
+        transactionReference: input.refundReference,
+      })
+      .catch(() => {});
+
+    return result;
   }
 
   /**
@@ -767,6 +1160,7 @@ export class CommerceService {
         paymentProofs: { orderBy: { receivedAt: "desc" } },
         shipments: { orderBy: { shippedAt: "desc" } },
         cancellationRequests: { orderBy: { createdAt: "desc" } },
+        refundRecords: { orderBy: { createdAt: "desc" } },
         whatsappMessages: { orderBy: { createdAt: "desc" } },
       },
     });
@@ -782,6 +1176,12 @@ export class CommerceService {
    * Admin: Update store payment settings
    */
   async updatePaymentSettings(adminId: string | undefined, input: UpdatePaymentSettingsInput) {
+    if (this.isPlaceholderStoreSettings(input)) {
+      throw new BadRequestError(
+        "Cannot configure placeholder payment credentials as active store settings. Provide genuine business values."
+      );
+    }
+
     const updated = await prisma.storeSettings.upsert({
       where: { id: "default" },
       update: {
@@ -814,5 +1214,51 @@ export class CommerceService {
     });
 
     return updated;
+  }
+
+  /**
+   * Protected retrieval of payment proof file (authorizes admin session or guest order token)
+   */
+  async getProtectedPaymentProofFile(
+    proofId: string,
+    auth: { adminUserId?: string; guestToken?: string }
+  ) {
+    const proof = await prisma.paymentProof.findUnique({
+      where: { id: proofId },
+      include: { order: true },
+    });
+
+    if (!proof) {
+      throw new NotFoundError("Payment proof record not found.");
+    }
+
+    const isAdmin = Boolean(auth.adminUserId);
+    const hasValidGuestToken =
+      Boolean(auth.guestToken) &&
+      this.hashToken(auth.guestToken!) === proof.order.guestTokenHash;
+
+    if (!isAdmin && !hasValidGuestToken) {
+      if (!auth.adminUserId && !auth.guestToken) {
+        throw new UnauthorizedError("Authentication required to access payment proof files.");
+      }
+      throw new ForbiddenError("Unauthorized access to payment proof file.");
+    }
+
+    if (process.env.VERCEL === "1") {
+      throw new ServiceUnavailableError(
+        "Payment-proof retrieval is unavailable until private persistent storage is configured."
+      );
+    }
+
+    const diskPath = path.join(PROOFS_DIR, path.basename(proof.storageKey));
+    if (!fsSync.existsSync(diskPath)) {
+      throw new NotFoundError("Payment proof file not found on storage.");
+    }
+
+    return {
+      filePath: diskPath,
+      mimeType: proof.mimeType || "image/jpeg",
+      fileName: path.basename(proof.storageKey),
+    };
   }
 }

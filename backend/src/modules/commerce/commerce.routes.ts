@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { CommerceService } from "./commerce.service.js";
 import { WhatsAppService } from "../whatsapp/whatsapp.service.js";
@@ -12,9 +13,12 @@ import {
   createShipmentSchema,
   cancelOrderSchema,
   updatePaymentSettingsSchema,
+  adminCancellationDecisionSchema,
+  processRefundSchema,
 } from "./commerce.schemas.js";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
+import { SESSION_COOKIE_NAME } from "../../config/constants.js";
 
 const commerceService = new CommerceService();
 const whatsappService = new WhatsAppService();
@@ -76,6 +80,52 @@ publicOrdersRouter.post(
           message: "Payment proof submitted for independent bank ledger verification.",
         },
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Protected Retrieval of Payment Proof File (Authorizes Admin session OR Guest Token)
+publicOrdersRouter.get(
+  "/proofs/:proofId/file",
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { proofId } = req.params;
+      const guestToken =
+        (req.query.token as string) || (req.headers["x-guest-token"] as string);
+
+      let adminUserId: string | undefined;
+      const sessionToken = req.cookies?.[SESSION_COOKIE_NAME];
+      if (sessionToken && typeof sessionToken === "string") {
+        const sessionTokenHash = crypto
+          .createHash("sha256")
+          .update(sessionToken)
+          .digest("hex");
+        const session = await prisma.adminSession.findUnique({
+          where: { sessionTokenHash },
+          include: { adminUser: true },
+        });
+        if (
+          session &&
+          session.revokedAt === null &&
+          session.expiresAt > new Date() &&
+          session.adminUser.status === "ACTIVE"
+        ) {
+          adminUserId = session.adminUserId;
+        }
+      }
+
+      const fileInfo = await commerceService.getProtectedPaymentProofFile(proofId, {
+        adminUserId,
+        guestToken,
+      });
+
+      res.setHeader("Content-Type", fileInfo.mimeType);
+      res.setHeader("Content-Disposition", `inline; filename="${fileInfo.fileName}"`);
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Cache-Control", "private, no-cache, no-store, must-revalidate");
+      res.sendFile(fileInfo.filePath);
     } catch (error) {
       next(error);
     }
@@ -204,6 +254,48 @@ adminOrdersRouter.post(
   }
 );
 
+// Admin: Decide cancellation request (Approve or Reject)
+adminOrdersRouter.post(
+  "/:id/cancellation-decision",
+  validateBody(adminCancellationDecisionSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const adminId = req.adminUser?.id;
+      const result = await commerceService.decideCancellation(req.params.id, adminId, req.body);
+      res.status(200).json({
+        data: result,
+        meta: {
+          requestId: req.requestId,
+          message: `Cancellation request ${req.body.decision.toLowerCase()} successfully.`,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Admin: Process manual bank/UPI refund
+adminOrdersRouter.post(
+  "/:id/refund",
+  validateBody(processRefundSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const adminId = req.adminUser?.id;
+      const result = await commerceService.processRefund(req.params.id, adminId, req.body);
+      res.status(200).json({
+        data: result,
+        meta: {
+          requestId: req.requestId,
+          message: "Refund processed and bank transaction reference recorded.",
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // =============================================================================
 // Admin Settings Router (/api/v1/admin/settings)
 // =============================================================================
@@ -248,9 +340,72 @@ adminSettingsRouter.put(
 // =============================================================================
 export const whatsappRouter = Router();
 
-// Inbound webhook from customer or simulator
+// Meta Cloud API Webhook Verification Handshake
+whatsappRouter.get("/webhook", (req: Request, res: Response) => {
+  const mode = req.query["hub.mode"] as string | undefined;
+  const token = req.query["hub.verify_token"] as string | undefined;
+  const challenge = req.query["hub.challenge"] as string | undefined;
+
+  const verifiedChallenge = whatsappService.verifyWebhookHandshake(mode, token, challenge);
+  if (verifiedChallenge) {
+    res.status(200).send(verifiedChallenge);
+    return;
+  }
+  res.status(403).json({ error: "Forbidden: verification token mismatch" });
+});
+
+// Inbound webhook from Meta Cloud API or test simulator
 whatsappRouter.post("/webhook", async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const signature = req.headers["x-hub-signature-256"] as string | undefined;
+    const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+
+    const isValid = whatsappService.verifyWebhookSignature(rawBody, signature);
+    if (!isValid) {
+      res.status(401).json({ error: { message: "Invalid webhook HMAC signature" } });
+      return;
+    }
+
+    // Check if Meta Cloud API standard format
+    if (req.body?.entry?.[0]?.changes?.[0]?.value) {
+      const value = req.body.entry[0].changes[0].value;
+
+      // Status updates
+      if (value.statuses && Array.isArray(value.statuses)) {
+        for (const st of value.statuses) {
+          const statusMap: Record<string, "SENT" | "DELIVERED" | "READ" | "FAILED"> = {
+            sent: "SENT",
+            delivered: "DELIVERED",
+            read: "READ",
+            failed: "FAILED",
+          };
+          const mapped = statusMap[st.status] || "SENT";
+          await whatsappService.handleDeliveryStatus({
+            providerMessageId: st.id,
+            status: mapped,
+            errorMessage: st.errors?.[0]?.message,
+          });
+        }
+      }
+
+      // Incoming messages
+      if (value.messages && Array.isArray(value.messages)) {
+        for (const msg of value.messages) {
+          const senderPhone = `+${msg.from}`;
+          const messageText = msg.text?.body || msg.type || "Media message";
+          await whatsappService.handleInboundMessage({
+            senderPhone,
+            messageText,
+            providerMessageId: msg.id,
+          });
+        }
+      }
+
+      res.status(200).json({ status: "success", source: "meta_cloud_webhook" });
+      return;
+    }
+
+    // Direct / simulator format
     const { senderPhone, messageText, providerMessageId } = req.body;
     if (!senderPhone || !messageText) {
       res.status(400).json({ error: { message: "senderPhone and messageText are required" } });
@@ -270,6 +425,14 @@ whatsappRouter.post("/webhook", async (req: Request, res: Response, next: NextFu
   } catch (error) {
     next(error);
   }
+});
+
+// Provider status and connectivity report
+whatsappRouter.get("/provider-status", (req: Request, res: Response) => {
+  res.status(200).json({
+    data: whatsappService.getProviderInfo(),
+    meta: { requestId: req.requestId },
+  });
 });
 
 // Admin list of WhatsApp communications

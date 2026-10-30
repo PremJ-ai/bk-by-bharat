@@ -320,8 +320,8 @@ model Order {
   postalCode           String
   country              String                @default("India")
   deliveryNotes        String?
-  whatsappConsent      Boolean               @default(true)
-  whatsappConsentAt    DateTime              @default(now())
+  whatsappConsent      Boolean               @default(false)
+  whatsappConsentAt    DateTime?
   guestTokenHash       String                @unique
   subtotalPaise        Int
   discountPaise        Int                   @default(0)
@@ -337,6 +337,7 @@ model Order {
   paymentProofs        PaymentProof[]
   shipments            Shipment[]
   cancellationRequests CancellationRequest[]
+  refundRecords        RefundRecord[]
   whatsappMessages     WhatsAppMessage[]
 
   @@index([status])
@@ -454,6 +455,34 @@ model CancellationRequest {
 
   @@index([orderId])
   @@map("cancellation_requests")
+}
+
+enum RefundStatus {
+  REQUESTED
+  APPROVED
+  PROCESSING
+  COMPLETED
+  REJECTED
+}
+
+model RefundRecord {
+  id                   String        @id @default(uuid())
+  orderId              String
+  order                Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amountPaise          Int
+  currency             String        @default("INR")
+  status               RefundStatus  @default(REQUESTED)
+  reason               String
+  source               RequestSource @default(WHATSAPP)
+  adminNotes           String?
+  transactionReference String?       // Bank / UPI UTR reference
+  processedByAdminId   String?
+  processedAt          DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@index([orderId])
+  @@map("refund_records")
 }
 
 enum MessageDirection {

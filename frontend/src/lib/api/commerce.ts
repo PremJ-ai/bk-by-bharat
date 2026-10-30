@@ -309,6 +309,42 @@ export async function updateStorePaymentSettings(
 }
 
 /**
+ * Admin: Decide Cancellation Request (Approve or Reject)
+ */
+export async function decideAdminCancellation(
+  orderId: string,
+  payload: {
+    decision: "APPROVED" | "REJECTED";
+    reason?: string;
+  }
+): Promise<any> {
+  const res = await apiClient<any>(`/admin/orders/${orderId}/cancellation-decision`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return res.data;
+}
+
+/**
+ * Admin: Process Manual Bank/UPI Refund
+ */
+export async function processAdminRefund(
+  orderId: string,
+  payload: {
+    refundAmountPaise: number;
+    refundReference: string;
+    reason: string;
+    adminNotes?: string;
+  }
+): Promise<any> {
+  const res = await apiClient<any>(`/admin/orders/${orderId}/refund`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return res.data;
+}
+
+/**
  * Admin: Get WhatsApp Messages
  */
 export async function getWhatsAppMessages(params?: {

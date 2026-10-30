@@ -186,6 +186,9 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
   const isProofReceived = order.status === "PAYMENT_PROOF_RECEIVED";
   const isPaid = order.status === "PAID" || order.status === "PROCESSING";
   const isShipped = order.status === "SHIPPED" || order.status === "DELIVERED";
+  const isCancellationRequested = order.status === "CANCELLATION_REQUESTED";
+  const isRefundRequested = order.status === "REFUND_REQUESTED" || order.status === "REFUND_PROCESSING";
+  const isRefunded = order.status === "REFUNDED" || order.status === "PARTIALLY_REFUNDED";
   const isCancelled = order.status === "CANCELLED";
 
   const qrImageUrl =
@@ -208,8 +211,10 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
         <div className="bg-surface border border-border p-8 md:p-12 text-center space-y-4 relative overflow-hidden mb-10 shadow-xs">
           <div
             className={`absolute top-0 left-0 right-0 h-[3px] ${
-              isCancelled
+              isCancelled || isRefunded
                 ? "bg-crimson"
+                : isCancellationRequested || isRefundRequested
+                ? "bg-gold"
                 : isPaid || isShipped
                 ? "bg-stock-ok"
                 : "bg-gold"
@@ -218,14 +223,16 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
 
           <div
             className={`inline-flex items-center justify-center w-14 h-14 rounded-full mx-auto ${
-              isCancelled
+              isCancelled || isRefunded
                 ? "bg-crimson/10 text-crimson"
+                : isCancellationRequested || isRefundRequested
+                ? "bg-gold/10 text-gold"
                 : isPaid || isShipped
                 ? "bg-stock-ok/10 text-stock-ok"
                 : "bg-gold/10 text-gold"
             }`}
           >
-            {isCancelled ? (
+            {isCancelled || isRefunded ? (
               <X className="w-7 h-7" />
             ) : isPaid || isShipped ? (
               <CheckCircle className="w-7 h-7" />
@@ -240,12 +247,17 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
             {isProofReceived && "Payment Proof Submitted · In Ledger Verification"}
             {isPaid && "Payment Confirmed · Garments in Tailoring Queue"}
             {isShipped && "Dispatched via Luxury Courier"}
+            {isCancellationRequested && "Cancellation Request Submitted · Atelier Review"}
+            {isRefundRequested && "Refund Initiated · Processing Bank Transfer"}
+            {isRefunded && "Order Refunded & Settled"}
             {isCancelled && "Order Cancelled"}
           </span>
 
           <h1 className="font-display text-3xl sm:text-4xl text-ink font-normal">
             {isCancelled
               ? `Order Cancelled`
+              : isRefunded
+              ? `Refund Processed`
               : `Thank You, ${order.customerName}`}
           </h1>
 
@@ -260,6 +272,12 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
               "Your payment is verified. Your garment is now individually scheduled for hand-cutting, stitching, and finishing in our Delhi atelier."}
             {isShipped &&
               "Your heirloom garment has completed hand inspection, pressing, and has been dispatched with luxury tracking."}
+            {isCancellationRequested &&
+              "Your cancellation request has been received. Our master tailor and accounting team are reviewing fabrication and payment ledger status."}
+            {isRefundRequested &&
+              "Your refund request has been logged. Our finance desk is preparing the manual bank/UPI transfer."}
+            {isRefunded &&
+              "Your refund has been completed and transferred back to your account. Bank settlement reference is recorded in your ledger."}
             {isCancelled && "This order has been cancelled and any reserved inventory has been released."}
           </p>
 
@@ -531,7 +549,7 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
 
-              {(isAwaitingReview || isAwaitingPayment) && (
+              {!isShipped && !isCancelled && !isCancellationRequested && !isRefundRequested && !isRefunded && (
                 <button
                   type="button"
                   onClick={() => setShowCancelModal(true)}
@@ -562,12 +580,18 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
               {cancelSuccess ? (
                 <div className="py-4 text-center space-y-2">
                   <CheckCircle className="w-8 h-8 text-stock-ok mx-auto" />
-                  <p className="text-xs text-ink">Order cancelled successfully. Reserved stock has been released.</p>
+                  <p className="text-xs text-ink">
+                    {isAwaitingReview || isAwaitingPayment
+                      ? "Order cancelled successfully. Reserved stock has been released."
+                      : "Cancellation request received and forwarded to our atelier desk for review."}
+                  </p>
                 </div>
               ) : (
                 <form onSubmit={handleCancelOrder} className="space-y-4">
                   <p className="text-xs text-muted leading-relaxed font-sans">
-                    Are you sure you wish to cancel this order? Any reserved inventory will be released immediately.
+                    {isAwaitingReview || isAwaitingPayment
+                      ? "Are you sure you wish to cancel this order? Any reserved inventory will be released immediately."
+                      : "Requesting cancellation for an in-progress or verified order will be forwarded to our master tailor and finance desk for review."}
                   </p>
 
                   <div className="space-y-1">

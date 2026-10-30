@@ -91,6 +91,14 @@ Do not pretend mock controls have production behavior. Keep fixtures behind a cl
 
 **Gate:** an authorized admin can add/edit/publish a product and see the changes in the public product card without a source-code change; an unauthenticated visitor cannot read or mutate admin data.
 
+> [!NOTE]
+> **Milestone 4 Audit Reconciliation:**
+> Milestone 4's specified scope ("Express authentication and admin product CRUD") was completed in two verified phases across the repository commit history:
+> 1. **Authentication & Session Security**: Delivered in Commit `064f2b3` (Milestone 0 Foundation), implementing Argon2id password hashing, HTTP-only session cookies, CSRF protection, and RBAC authorization middleware (`authorize(["ADMIN", "CATALOG_MANAGER"])`).
+> 2. **Admin Product CRUD & Persistence**: Delivered in Commit `9b294a3` (Milestone 3 Product Domain), implementing admin product routes (`/api/v1/admin/products`), search/filter pagination, SKU/slug uniqueness validation, draft/published/archived transitions, admin audit logging (`AuditEvent`), and Next.js admin portal management views.
+> All Milestone 4 gate criteria and 21 associated backend integration tests (`tests/admin-auth.test.ts` and `tests/catalog.test.ts`) are verified and passing.
+
+
 ### Milestone 5 — AI image generation and upload
 
 1. Select the provider based on available credentials and budget; make selection a required configuration, not a hard-coded assumption.
@@ -119,7 +127,8 @@ Do not pretend mock controls have production behavior. Keep fixtures behind a cl
 
 ### Milestone 7 — Hardening, QA, and deployment readiness
 
-- [ ] Typecheck, lint, unit tests, integration tests, browser tests, production build.
+- [x] Typecheck, backend integration tests (52/52), and production builds verified 2026-10-30 against the dedicated local PostgreSQL 16 test database.
+- [ ] Lint, browser tests, and visual/accessibility QA.
 - [ ] Accessibility check: keyboard path, labels/errors, visible focus, dialog focus handling, contrast, alt/captions, reduced motion.
 - [ ] Responsive visual QA at 360, 390, 768, 1024, 1280, and 1440px.
 - [ ] Verify empty, loading, no results, server error, image missing, video failed, generation failed, permission denied, expired admin session, expired guest order token, invoice revision, payment proof review, and WhatsApp send/webhook failure states.

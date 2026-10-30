@@ -25,7 +25,10 @@ export function createApp(): Application {
   // CORS configuration
   app.use(
     cors({
-      origin: [env.FRONTEND_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000"],
+      origin:
+        env.NODE_ENV === "production"
+          ? [env.FRONTEND_ORIGIN]
+          : [env.FRONTEND_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000"],
       credentials: true,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization", "X-Request-Id", "X-CSRF-Token"],
@@ -35,8 +38,15 @@ export function createApp(): Application {
   // Request correlation ID
   app.use(requestIdMiddleware);
 
-  // Body parsing with strict size limits
-  app.use(express.json({ limit: "1mb" }));
+  // Body parsing with strict size limits and rawBody capture for webhooks
+  app.use(
+    express.json({
+      limit: "1mb",
+      verify: (req: any, _res, buf) => {
+        req.rawBody = buf;
+      },
+    })
+  );
   app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
   // Cookie parsing
@@ -56,8 +66,20 @@ export function createApp(): Application {
     }
   });
 
-  // Static files for uploaded/generated assets
-  app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
+  // Reject direct public static access to sensitive payment proof documents
+  app.use("/uploads/proofs", (_req, res) => {
+    res.status(403).json({
+      error: {
+        code: "FORBIDDEN",
+        message: "Direct static access to payment proof files is prohibited. Protected retrieval required.",
+      },
+    });
+  });
+
+  // Vercel Functions do not persist or serve writable application files.
+  if (process.env.VERCEL !== "1") {
+    app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
+  }
 
   // API v1 routes with rate limiting
   app.use("/api/v1", apiRateLimiter, v1Router);
