@@ -167,14 +167,32 @@ export async function getGuestOrderStatus(
 }
 
 /**
- * Public: Submit Payment Proof
+ * Public: request a short-lived signed upload URL for a private payment screenshot.
+ */
+export async function createPaymentProofUploadUrl(payload: {
+  token: string;
+  mimeType: "image/jpeg" | "image/png" | "image/webp";
+  fileSizeBytes: number;
+}): Promise<{ signedUploadUrl: string; storageKey: string }> {
+  const res = await apiClient<{ signedUploadUrl: string; storageKey: string }>(
+    "/orders/payment-proof/upload-url",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+  return res.data;
+}
+
+/**
+ * Public: submit proof metadata after the direct private-storage upload completes.
  */
 export async function submitPaymentProof(payload: {
   token: string;
-  fileBase64?: string;
-  url?: string;
-  mimeType?: string;
-  transactionReference?: string;
+  storageKey: string;
+  fileSizeBytes: number;
+  mimeType: "image/jpeg" | "image/png" | "image/webp";
+  transactionReference: string;
   notes?: string;
 }): Promise<PaymentProofModel> {
   const res = await apiClient<PaymentProofModel>("/orders/payment-proof", {

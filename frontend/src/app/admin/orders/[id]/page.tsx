@@ -596,7 +596,11 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
 
               <button
                 type="submit"
-                disabled={isVerifying || isPaid}
+                disabled={
+                  isVerifying ||
+                  isPaid ||
+                  !order.paymentProofs?.some((proof: any) => proof.status === "PENDING_REVIEW")
+                }
                 className="w-full bg-stock-ok hover:bg-stock-ok/90 text-white py-2.5 text-xs uppercase tracking-caps font-semibold flex items-center justify-center space-x-2 transition-colors disabled:opacity-50"
               >
                 {isVerifying ? (

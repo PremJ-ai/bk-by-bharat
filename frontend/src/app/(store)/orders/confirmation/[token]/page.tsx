@@ -8,6 +8,7 @@ import { SiteFooter } from "@/components/layout/SiteFooter";
 import { formatINR } from "@/components/product/ProductCard";
 import {
   getGuestOrderStatus,
+  createPaymentProofUploadUrl,
   submitPaymentProof,
   cancelGuestOrder,
   type GuestOrderStatusModel,
@@ -89,20 +90,27 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setProofFeedback({ type: "error", message: "Upload a JPEG, PNG, or WebP screenshot." });
+      e.target.value = "";
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setProofFeedback({ type: "error", message: "The screenshot must be 10MB or smaller." });
+      e.target.value = "";
+      return;
+    }
+    if (proofPreview) URL.revokeObjectURL(proofPreview);
     setProofFile(file);
-    const reader = new FileReader();
-    reader.onload = () => {
-      setProofPreview(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    setProofPreview(URL.createObjectURL(file));
   };
 
   const handlePaymentProofSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!proofPreview && !utrReference.trim()) {
+    if (!proofFile || !utrReference.trim()) {
       setProofFeedback({
         type: "error",
-        message: "Please upload your payment screenshot or provide the 12-digit UPI/Bank UTR reference.",
+        message: "Upload your payment screenshot and enter the UPI / bank UTR reference.",
       });
       return;
     }
@@ -111,11 +119,27 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
       setIsSubmittingProof(true);
       setProofFeedback(null);
 
+      const uploadTicket = await createPaymentProofUploadUrl({
+        token,
+        mimeType: proofFile.type as "image/jpeg" | "image/png" | "image/webp",
+        fileSizeBytes: proofFile.size,
+      });
+
+      const uploadResponse = await fetch(uploadTicket.signedUploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": proofFile.type },
+        body: proofFile,
+      });
+      if (!uploadResponse.ok) {
+        throw new Error("The screenshot could not be uploaded to secure storage. Please try again.");
+      }
+
       await submitPaymentProof({
         token,
-        fileBase64: proofPreview || undefined,
-        mimeType: proofFile?.type || "image/jpeg",
-        transactionReference: utrReference.trim() || undefined,
+        storageKey: uploadTicket.storageKey,
+        fileSizeBytes: proofFile.size,
+        mimeType: proofFile.type as "image/jpeg" | "image/png" | "image/webp",
+        transactionReference: utrReference.trim(),
         notes: proofNotes.trim() || undefined,
       });
 
@@ -124,6 +148,7 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
         message: "Payment proof submitted successfully. Our accounting desk is verifying the transaction.",
       });
       setProofFile(null);
+      if (proofPreview) URL.revokeObjectURL(proofPreview);
       setProofPreview(null);
       setUtrReference("");
       setProofNotes("");
@@ -381,6 +406,7 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
                       type="text"
                       value={utrReference}
                       onChange={(e) => setUtrReference(e.target.value)}
+                      required
                       placeholder="e.g. 402918274192"
                       className="w-full bg-canvas border border-border p-2.5 text-xs text-ink font-mono focus:border-gold focus:outline-none"
                     />
@@ -393,7 +419,7 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept="image/*"
+                      accept="image/jpeg,image/png,image/webp"
                       className="hidden"
                       onChange={handleProofFileSelect}
                     />

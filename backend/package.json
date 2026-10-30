@@ -2,10 +2,11 @@
   "name": "backend",
   "version": "0.1.0",
   "private": true,
-  "main": "src/server.ts",
+  "main": "src/index.ts",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
+    "vercel-build": "prisma generate && npm run build",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
