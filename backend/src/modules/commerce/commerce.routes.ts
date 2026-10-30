@@ -9,6 +9,7 @@ import {
   guestCheckoutSchema,
   createInvoiceSchema,
   submitPaymentProofSchema,
+  createPaymentProofUploadUrlSchema,
   verifyPaymentSchema,
   createShipmentSchema,
   cancelOrderSchema,
@@ -60,6 +61,20 @@ publicOrdersRouter.get(
         data: order,
         meta: { requestId: req.requestId },
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Guest: create a short-lived private-storage upload URL after checking the order token.
+publicOrdersRouter.post(
+  "/payment-proof/upload-url",
+  validateBody(createPaymentProofUploadUrlSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const upload = await commerceService.createPaymentProofUploadUrl(req.body);
+      res.status(200).json({ data: upload, meta: { requestId: req.requestId } });
     } catch (error) {
       next(error);
     }
@@ -125,6 +140,10 @@ publicOrdersRouter.get(
       res.setHeader("Content-Disposition", `inline; filename="${fileInfo.fileName}"`);
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("Cache-Control", "private, no-cache, no-store, must-revalidate");
+      if (fileInfo.signedUrl) {
+        res.redirect(302, fileInfo.signedUrl);
+        return;
+      }
       res.sendFile(fileInfo.filePath);
     } catch (error) {
       next(error);

@@ -43,13 +43,25 @@ export const createInvoiceSchema = z.object({
 
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
 
+export const createPaymentProofUploadUrlSchema = z.object({
+  token: z.string().trim().min(16, "Valid guest status token is required"),
+  mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+  fileSizeBytes: z.number().int().positive().max(10 * 1024 * 1024),
+});
+
+export type CreatePaymentProofUploadUrlInput = z.infer<typeof createPaymentProofUploadUrlSchema>;
+
 export const submitPaymentProofSchema = z.object({
   token: z.string().trim().min(16, "Valid guest status token is required"),
+  storageKey: z.string().trim().min(1).optional(),
   fileBase64: z.string().optional(),
-  url: z.string().url().optional(),
-  mimeType: z.string().default("image/jpeg"),
-  transactionReference: z.string().trim().max(100).optional(),
+  fileSizeBytes: z.number().int().positive().max(10 * 1024 * 1024).optional(),
+  mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]).default("image/jpeg"),
+  transactionReference: z.string().trim().min(4, "UTR / Bank transaction reference is required").max(100),
   notes: z.string().trim().max(500).optional(),
+}).refine((value) => Boolean(value.storageKey || value.fileBase64), {
+  message: "A payment screenshot upload is required.",
+  path: ["storageKey"],
 });
 
 export type SubmitPaymentProofInput = z.infer<typeof submitPaymentProofSchema>;
