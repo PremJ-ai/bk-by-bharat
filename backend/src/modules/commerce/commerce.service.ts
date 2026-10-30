@@ -519,6 +519,12 @@ export class CommerceService {
    * Guest: persist payment-proof metadata only after a screenshot upload completes.
    */
   async submitPaymentProof(input: SubmitPaymentProofInput) {
+    if (process.env.VERCEL === "1" && input.fileBase64) {
+      throw new ServiceUnavailableError(
+        "On Vercel, upload the screenshot through the signed private-storage upload endpoint."
+      );
+    }
+
     const guestTokenHash = this.hashToken(input.token);
     const order = await prisma.order.findUnique({ where: { guestTokenHash } });
 
@@ -559,12 +565,6 @@ export class CommerceService {
       });
       fileSizeBytes = stored.fileSizeBytes;
     } else if (input.fileBase64) {
-      if (process.env.VERCEL === "1") {
-        throw new ServiceUnavailableError(
-          "On Vercel, upload the screenshot through the signed private-storage upload endpoint."
-        );
-      }
-
       const cleanBase64 = input.fileBase64.replace(/^data:image\/[a-z]+;base64,/, "");
       const buffer = Buffer.from(cleanBase64, "base64");
       if (buffer.length < 1 || buffer.length > 10 * 1024 * 1024) {

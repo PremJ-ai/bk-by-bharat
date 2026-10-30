@@ -458,6 +458,7 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
           token: "test_guest_status_token",
           mimeType: "image/png",
           fileBase64: "aW1hZ2U=",
+          transactionReference: "TEST-UTR-LOCAL-DISK",
         })
       ).rejects.toMatchObject({ statusCode: 503 });
     } finally {

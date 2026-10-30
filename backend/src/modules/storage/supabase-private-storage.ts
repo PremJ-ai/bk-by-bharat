@@ -116,16 +116,26 @@ export class SupabasePrivateStorage {
     }
 
     const config = this.getConfig();
-    const url = config.storageBaseUrl + "/object/info/authenticated/" +
+    const url = config.storageBaseUrl + "/object/info/" +
       encodeURIComponent(config.bucket) + "/" + encodeStoragePath(input.storageKey);
-    const response = await fetch(url, { method: "HEAD", headers: this.headers(config) });
+    const response = await fetch(url, { method: "GET", headers: this.headers(config) });
 
     if (!response.ok) {
       throw new BadRequestError("The payment screenshot could not be found in private storage. Please upload it again.");
     }
 
-    const actualSize = Number(response.headers.get("content-length") || 0);
-    const actualMime = (response.headers.get("content-type") || "").split(";")[0].toLowerCase();
+    let metadata: any;
+    try {
+      metadata = await response.json();
+    } catch {
+      throw new ServiceUnavailableError("Supabase Storage returned invalid payment-proof metadata.");
+    }
+
+    const storedMetadata = metadata?.metadata || {};
+    const actualSize = Number(storedMetadata.size ?? metadata?.size ?? 0);
+    const actualMime = String(
+      storedMetadata.mimetype ?? storedMetadata.contentType ?? metadata?.mimetype ?? metadata?.contentType ?? ""
+    ).split(";")[0].toLowerCase();
 
     if (actualSize > MAX_PROOF_BYTES || (actualSize > 0 && actualSize !== input.fileSizeBytes)) {
       throw new BadRequestError("The uploaded proof size does not match the selected file.");
