@@ -814,6 +814,8 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
         process.env.WHATSAPP_APP_SECRET = previousAppSecret;
       }
     }
+  });
+
   it("expires unpaid invoice holds, releases stock, and allows an admin to reissue", async () => {
     const variantBefore = await prisma.productVariant.findUniqueOrThrow({
       where: { id: testVariantId },
@@ -892,7 +894,5 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
       where: { id: testVariantId },
     });
     expect(afterCleanup.reservedStock).toBe(reservedBefore);
-  });
-
   });
 });
