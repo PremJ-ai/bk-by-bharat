@@ -2,6 +2,10 @@ import crypto from "node:crypto";
 import { prisma } from "../../db/prisma.js";
 import { logger } from "../../lib/logger.js";
 
+function getFrontendOrigin(): string {
+  return (process.env.FRONTEND_ORIGIN || "http://localhost:3000").replace(/\/+$/, "");
+}
+
 export interface WhatsAppProvider {
   readonly name: string;
   isLive(): boolean;
@@ -516,7 +520,7 @@ export class WhatsAppService {
     rawToken: string;
   }) {
     const amountInr = (order.subtotalPaise / 100).toLocaleString("en-IN");
-    const statusUrl = `http://localhost:3000/order-status/${order.rawToken}`;
+    const statusUrl = getFrontendOrigin() + "/orders/confirmation/" + order.rawToken;
 
     const text =
       `Namaste ${order.customerName},\n\n` +
@@ -543,11 +547,9 @@ export class WhatsAppService {
     upiId: string;
     payeeName: string;
     paymentInstructions: string;
-    rawToken: string;
     expiresAt?: Date | null;
   }) {
     const amountInr = (order.totalPaise / 100).toLocaleString("en-IN");
-    const statusUrl = `http://localhost:3000/order-status/${order.rawToken}`;
     const expiresText = order.expiresAt
       ? `\nPayment reservation held until: ${new Date(order.expiresAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`
       : "";
@@ -560,7 +562,7 @@ export class WhatsAppService {
       `• UPI ID: ${order.upiId}\n` +
       `• Payee: ${order.payeeName}\n` +
       `• Note: Please include "${order.orderNumber}" in your UPI remarks.\n\n` +
-      `View interactive QR code and upload payment screenshot: ${statusUrl}`;
+      "Use the secure order-confirmation link from your original order message to view the QR code and upload your payment screenshot.";
 
     return this.sendOutboundMessage({
       orderId: order.id,
@@ -589,21 +591,37 @@ export class WhatsAppService {
     });
   }
 
+  async notifyPaymentProofRejected(order: {
+    id: string;
+    orderNumber: string;
+    customerName: string;
+    whatsappNumber: string;
+    reason: string;
+  }) {
+    const text =
+      "Namaste " + order.customerName + ",\n\n" +
+      "The payment proof submitted for Order " + order.orderNumber + " could not be verified.\n\n" +
+      "Reason: " + order.reason + "\n\n" +
+      "Please open the secure order-confirmation link from your original order message and submit a corrected screenshot and UTR. Your stock reservation is being held while you correct the proof.";
+
+    return this.sendOutboundMessage({
+      orderId: order.id,
+      recipientPhone: order.whatsappNumber,
+      templateName: "payment_proof_rejected",
+      bodyText: text,
+    });
+  }
+
   async notifyPaymentVerified(order: {
     id: string;
     orderNumber: string;
     customerName: string;
     whatsappNumber: string;
-    rawToken?: string;
   }) {
-    const statusUrl = order.rawToken
-      ? `\nTrack tailoring progress: http://localhost:3000/order-status/${order.rawToken}`
-      : "";
-
     const text =
       `Namaste ${order.customerName},\n\n` +
       `Payment confirmed for Order ${order.orderNumber}!\n\n` +
-      `Your garment is now officially scheduled in our workshop for cutting and hand finishing. We will notify you as soon as your heirloom piece is dispatched.${statusUrl}`;
+      "Your garment is now officially scheduled in our workshop for cutting and hand finishing. We will notify you as soon as your piece is dispatched.";
 
     return this.sendOutboundMessage({
       orderId: order.id,

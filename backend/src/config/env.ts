@@ -18,6 +18,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 characters"),
   FRONTEND_ORIGIN: z.string().default("http://localhost:3000"),
+  CRON_SECRET: z.string().min(32, "CRON_SECRET must be at least 32 characters").optional(),
   TRUST_PROXY: z
     .string()
     .default("false")

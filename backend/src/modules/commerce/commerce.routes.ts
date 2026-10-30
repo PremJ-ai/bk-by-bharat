@@ -9,7 +9,9 @@ import {
   guestCheckoutSchema,
   createInvoiceSchema,
   submitPaymentProofSchema,
+  createPaymentProofUploadUrlSchema,
   verifyPaymentSchema,
+  rejectPaymentProofSchema,
   createShipmentSchema,
   cancelOrderSchema,
   updatePaymentSettingsSchema,
@@ -60,6 +62,20 @@ publicOrdersRouter.get(
         data: order,
         meta: { requestId: req.requestId },
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Guest: create a short-lived private-storage upload URL after checking the order token.
+publicOrdersRouter.post(
+  "/payment-proof/upload-url",
+  validateBody(createPaymentProofUploadUrlSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const upload = await commerceService.createPaymentProofUploadUrl(req.body);
+      res.status(200).json({ data: upload, meta: { requestId: req.requestId } });
     } catch (error) {
       next(error);
     }
@@ -122,9 +138,19 @@ publicOrdersRouter.get(
       });
 
       res.setHeader("Content-Type", fileInfo.mimeType);
-      res.setHeader("Content-Disposition", `inline; filename="${fileInfo.fileName}"`);
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("Cache-Control", "private, no-cache, no-store, must-revalidate");
+      if (fileInfo.signedUrl) {
+        res.redirect(302, fileInfo.signedUrl);
+        return;
+      }
+      if (!("filePath" in fileInfo) || typeof fileInfo.filePath !== "string") {
+        res.status(404).json({
+          error: { code: "NOT_FOUND", message: "Payment proof file is unavailable on this deployment." },
+        });
+        return;
+      }
+      res.setHeader("Content-Disposition", `inline; filename="${fileInfo.fileName}"`);
       res.sendFile(fileInfo.filePath);
     } catch (error) {
       next(error);
@@ -204,6 +230,31 @@ adminOrdersRouter.post(
         meta: {
           requestId: req.requestId,
           message: "Verified invoice issued and payment hold initiated.",
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Admin: reject a payment proof and request a corrected submission.
+adminOrdersRouter.post(
+  "/:id/reject-payment-proof",
+  validateBody(rejectPaymentProofSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const adminId = req.adminUser?.id;
+      const result = await commerceService.rejectPaymentProof(
+        req.params.id,
+        adminId,
+        req.body.reason
+      );
+      res.status(200).json({
+        data: result,
+        meta: {
+          requestId: req.requestId,
+          message: "Payment proof rejected. The customer can submit a corrected proof; inventory remains reserved.",
         },
       });
     } catch (error) {
@@ -457,6 +508,52 @@ whatsappRouter.get(
 
       res.status(200).json({
         data: messages,
+        meta: { requestId: req.requestId },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+
+export const maintenanceRouter = Router();
+
+maintenanceRouter.get(
+  "/expire-payment-holds",
+  async (req: Request, res: Response, next: NextFunction) => {
+    const configuredSecret = process.env.CRON_SECRET;
+    if (!configuredSecret) {
+      res.status(503).json({
+        error: {
+          code: "SERVICE_UNAVAILABLE",
+          message: "CRON_SECRET is not configured for maintenance tasks.",
+        },
+      });
+      return;
+    }
+
+    const authorization = req.headers.authorization || "";
+    const suppliedSecret = authorization.startsWith("Bearer ")
+      ? authorization.slice("Bearer ".length)
+      : "";
+    const expectedBuffer = Buffer.from(configuredSecret);
+    const suppliedBuffer = Buffer.from(suppliedSecret);
+    const authorized =
+      suppliedBuffer.length === expectedBuffer.length &&
+      crypto.timingSafeEqual(suppliedBuffer, expectedBuffer);
+
+    if (!authorized) {
+      res.status(401).json({
+        error: { code: "UNAUTHORIZED", message: "Valid cron authorization is required." },
+      });
+      return;
+    }
+
+    try {
+      const result = await commerceService.expirePaymentHolds();
+      res.status(200).json({
+        data: result,
         meta: { requestId: req.requestId },
       });
     } catch (error) {

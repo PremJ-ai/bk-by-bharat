@@ -16,6 +16,7 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
   let guestToken: string;
   let orderNumber: string;
   let orderId: string;
+  let expiryOrderId: string | undefined;
 
   beforeAll(async () => {
     // 1. Create dedicated admin
@@ -83,6 +84,15 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
 
   afterAll(async () => {
     // Clean up test order and dependencies
+    if (expiryOrderId) {
+      await prisma.whatsAppMessage.deleteMany({ where: { orderId: expiryOrderId } });
+      await prisma.paymentProof.deleteMany({ where: { orderId: expiryOrderId } });
+      await prisma.invoice.deleteMany({ where: { orderId: expiryOrderId } });
+      await prisma.orderItem.deleteMany({ where: { orderId: expiryOrderId } });
+      await prisma.auditEvent.deleteMany({ where: { resourceType: "Order", resourceId: expiryOrderId } });
+      await prisma.order.deleteMany({ where: { id: expiryOrderId } });
+    }
+
     if (orderId) {
       await prisma.whatsAppMessage.deleteMany({ where: { orderId } });
       await prisma.paymentProof.deleteMany({ where: { orderId } });
@@ -398,6 +408,56 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     expect(adminRes.headers["content-type"]).toContain("image/png");
   });
 
+  it("allows admin to reject an invalid proof and lets the guest resubmit without releasing the stock hold", async () => {
+    const rejectionReason = "The receipt does not show a successful transfer. Please upload the completed transaction receipt.";
+
+    const rejected = await request(app)
+      .post(`/api/v1/admin/orders/${orderId}/reject-payment-proof`)
+      .set("Cookie", adminCookie)
+      .send({ reason: rejectionReason });
+
+    expect(rejected.status).toBe(200);
+    expect(rejected.body.data.status).toBe("AWAITING_CUSTOMER_PAYMENT");
+    expect(rejected.body.data.paymentStatus).toBe("REJECTED");
+
+    const orderAfterRejection = await prisma.order.findUnique({ where: { id: orderId } });
+    expect(orderAfterRejection?.paymentHoldExpiresAt).toBeTruthy();
+
+    const variantAfterRejection = await prisma.productVariant.findUnique({
+      where: { id: testVariantId },
+    });
+    expect(variantAfterRejection?.stock).toBe(10);
+    expect(variantAfterRejection?.reservedStock).toBe(2);
+
+    const rejectedProof = await prisma.paymentProof.findFirst({
+      where: { orderId, status: "REJECTED" },
+    });
+    expect(rejectedProof?.adminNotes).toBe(rejectionReason);
+
+    const replacement = await request(app)
+      .post("/api/v1/orders/payment-proof")
+      .send({
+        token: guestToken,
+        fileBase64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+        mimeType: "image/png",
+        transactionReference: "UPI/324198274193/Paytm",
+        notes: "Replacement receipt after first proof was rejected",
+      });
+
+    expect(replacement.status).toBe(201);
+    expect(replacement.body.data.status).toBe("PENDING_REVIEW");
+
+    const orderAfterResubmission = await prisma.order.findUnique({ where: { id: orderId } });
+    expect(orderAfterResubmission?.status).toBe("PAYMENT_PROOF_RECEIVED");
+    expect(orderAfterResubmission?.paymentStatus).toBe("PROOF_RECEIVED");
+
+    const variantAfterResubmission = await prisma.productVariant.findUnique({
+      where: { id: testVariantId },
+    });
+    expect(variantAfterResubmission?.stock).toBe(10);
+    expect(variantAfterResubmission?.reservedStock).toBe(2);
+  });
+
   it("refuses local-disk payment-proof uploads on Vercel", async () => {
     const previousVercel = process.env.VERCEL;
     process.env.VERCEL = "1";
@@ -408,6 +468,7 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
           token: "test_guest_status_token",
           mimeType: "image/png",
           fileBase64: "aW1hZ2U=",
+          transactionReference: "TEST-UTR-LOCAL-DISK",
         })
       ).rejects.toMatchObject({ statusCode: 503 });
     } finally {
@@ -444,7 +505,8 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
 
     // Verify payment proof record status
     const proof = await prisma.paymentProof.findFirst({
-      where: { orderId },
+      where: { orderId, status: "VERIFIED" },
+      orderBy: { verifiedAt: "desc" },
     });
     expect(proof?.status).toBe("VERIFIED");
   });
@@ -573,6 +635,17 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
       .post(`/api/v1/admin/orders/${paidOrderId}/invoice`)
       .set("Cookie", adminCookie)
       .send({ shippingPaise: 0 });
+
+    // Guest uploads payment proof before the admin can verify settlement.
+    const paidOrderProof = await request(app)
+      .post("/api/v1/orders/payment-proof")
+      .send({
+        token: paidToken,
+        fileBase64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+        mimeType: "image/png",
+        transactionReference: "UTR-TEST-CANCEL-PROOF-1",
+      });
+    expect(paidOrderProof.status).toBe(201);
 
     // Verify payment (stock -= 2, reservedStock -= 2)
     const stockBeforePayment = (await prisma.productVariant.findUnique({ where: { id: testVariantId } }))!.stock;
@@ -741,5 +814,85 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
         process.env.WHATSAPP_APP_SECRET = previousAppSecret;
       }
     }
+  });
+
+  it("expires unpaid invoice holds, releases stock, and allows an admin to reissue", async () => {
+    const variantBefore = await prisma.productVariant.findUniqueOrThrow({
+      where: { id: testVariantId },
+    });
+    const reservedBefore = variantBefore.reservedStock;
+
+    const checkout = await request(app)
+      .post("/api/v1/orders/checkout")
+      .send({
+        customerName: "Expiry Test Customer",
+        whatsappNumber: "+919876543210",
+        addressLine1: "42 Lodhi Estate",
+        city: "New Delhi",
+        stateRegion: "Delhi",
+        postalCode: "110003",
+        whatsappConsent: true,
+        items: [{ variantId: testVariantId, quantity: 1 }],
+      });
+
+    expect(checkout.status).toBe(201);
+    const createdOrder = await prisma.order.findUniqueOrThrow({
+      where: { orderNumber: checkout.body.data.orderNumber },
+    });
+    expiryOrderId = createdOrder.id;
+
+    const firstInvoice = await request(app)
+      .post(`/api/v1/admin/orders/${expiryOrderId}/invoice`)
+      .set("Cookie", adminCookie)
+      .send({ shippingPaise: 0 });
+    expect(firstInvoice.status).toBe(201);
+
+    await prisma.order.update({
+      where: { id: expiryOrderId },
+      data: { paymentHoldExpiresAt: new Date(Date.now() - 60_000) },
+    });
+
+    const expiryResult = await new CommerceService().expirePaymentHolds();
+    expect(expiryResult.expired).toBe(1);
+    expect(expiryResult.failed).toBe(0);
+
+    const expiredOrder = await prisma.order.findUniqueOrThrow({ where: { id: expiryOrderId } });
+    expect(expiredOrder.status).toBe("EXPIRED");
+    expect(expiredOrder.paymentStatus).toBe("EXPIRED");
+    expect(expiredOrder.paymentHoldExpiresAt).toBeNull();
+
+    const afterExpiry = await prisma.productVariant.findUniqueOrThrow({
+      where: { id: testVariantId },
+    });
+    expect(afterExpiry.stock).toBe(variantBefore.stock);
+    expect(afterExpiry.reservedStock).toBe(reservedBefore);
+
+    const reissuedInvoice = await request(app)
+      .post(`/api/v1/admin/orders/${expiryOrderId}/invoice`)
+      .set("Cookie", adminCookie)
+      .send({ shippingPaise: 0 });
+    expect(reissuedInvoice.status).toBe(201);
+
+    const reissuedOrder = await prisma.order.findUniqueOrThrow({ where: { id: expiryOrderId } });
+    expect(reissuedOrder.status).toBe("AWAITING_CUSTOMER_PAYMENT");
+    expect(reissuedOrder.paymentStatus).toBe("REQUESTED");
+
+    const afterReissue = await prisma.productVariant.findUniqueOrThrow({
+      where: { id: testVariantId },
+    });
+    expect(afterReissue.reservedStock).toBe(reservedBefore + 1);
+
+    // Expire the reissued hold too so the test leaves stock exactly as it found it.
+    await prisma.order.update({
+      where: { id: expiryOrderId },
+      data: { paymentHoldExpiresAt: new Date(Date.now() - 60_000) },
+    });
+    const cleanupResult = await new CommerceService().expirePaymentHolds();
+    expect(cleanupResult.expired).toBe(1);
+
+    const afterCleanup = await prisma.productVariant.findUniqueOrThrow({
+      where: { id: testVariantId },
+    });
+    expect(afterCleanup.reservedStock).toBe(reservedBefore);
   });
 });

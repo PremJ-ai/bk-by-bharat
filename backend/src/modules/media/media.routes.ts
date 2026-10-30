@@ -18,12 +18,22 @@ const generateMediaSchema = z.object({
   productId: z.string().optional(),
 });
 
+const createMediaUploadUrlSchema = z.object({
+  mimeType: z.enum(["image/jpeg", "image/png", "image/webp", "image/avif"]),
+  fileSizeBytes: z.number().int().positive().max(10 * 1024 * 1024),
+});
+
 const uploadMediaSchema = z.object({
   fileName: z.string().min(1),
+  // Keep this as a string so MediaService can return the specific unsupported-format message.
   mimeType: z.string().min(1),
+  storageKey: z.string().trim().min(1).optional(),
+  fileSizeBytes: z.number().int().positive().max(10 * 1024 * 1024).optional(),
   fileBase64: z.string().optional(),
   url: z.string().url().optional(),
   altText: z.string().min(1),
+}).refine((value) => Boolean(value.storageKey || value.fileBase64 || value.url), {
+  message: "A completed upload or valid image URL is required.",
 });
 
 const primaryMediaSchema = z.object({
@@ -47,6 +57,23 @@ adminMediaRouter.post(
           requestId: req.requestId,
           message: "Atelier AI asset generated successfully",
         },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Create a signed upload ticket for a product image. Router-level middleware requires an admin.
+adminMediaRouter.post(
+  "/upload-url",
+  validateBody(createMediaUploadUrlSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const upload = await mediaService.createMediaUploadUrl(req.body);
+      res.status(200).json({
+        data: upload,
+        meta: { requestId: req.requestId },
       });
     } catch (error) {
       next(error);

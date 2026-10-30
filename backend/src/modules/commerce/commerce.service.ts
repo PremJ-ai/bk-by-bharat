@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
 import { prisma } from "../../db/prisma.js";
+import { logger } from "../../lib/logger.js";
 import {
   BadRequestError,
   NotFoundError,
@@ -12,9 +13,11 @@ import {
   ServiceUnavailableError,
 } from "../../lib/errors.js";
 import { WhatsAppService } from "../whatsapp/whatsapp.service.js";
+import { SupabasePrivateStorage } from "../storage/supabase-private-storage.js";
 import type {
   GuestCheckoutInput,
   CreateInvoiceInput,
+  CreatePaymentProofUploadUrlInput,
   SubmitPaymentProofInput,
   VerifyPaymentInput,
   CreateShipmentInput,
@@ -27,7 +30,10 @@ const PROOFS_DIR = path.resolve(process.cwd(), "uploads", "proofs");
 fs.mkdir(PROOFS_DIR, { recursive: true }).catch(() => {});
 
 export class CommerceService {
-  constructor(private readonly whatsappService = new WhatsAppService()) {}
+  constructor(
+    private readonly whatsappService = new WhatsAppService(),
+    private readonly privateStorage = new SupabasePrivateStorage()
+  ) {}
 
   /**
    * Helper to hash an opaque guest status token with SHA-256
@@ -315,6 +321,7 @@ export class CommerceService {
         status: p.status,
         transactionReference: p.transactionReference,
         receivedAt: p.receivedAt,
+        reviewNote: p.status === "REJECTED" ? p.adminNotes : null,
       })),
       shipments: order.shipments.map((s) => ({
         id: s.id,
@@ -361,8 +368,12 @@ export class CommerceService {
       throw new NotFoundError(`Order '${orderId}' not found.`);
     }
 
-    if (order.status === "CANCELLED" || order.status === "PAID") {
-      throw new BadRequestError(`Cannot issue an invoice for an order in status ${order.status}.`);
+    if (
+      order.status !== "AWAITING_ADMIN_REVIEW" &&
+      order.status !== "AWAITING_CUSTOMER_PAYMENT" &&
+      order.status !== "EXPIRED"
+    ) {
+      throw new BadRequestError("Cannot issue or revise an invoice for an order in status " + order.status + ".");
     }
 
     const settings = await this.getStoreSettings();
@@ -390,15 +401,22 @@ export class CommerceService {
     // Execute in transaction: reserve stock on variants, deactivate old invoices, create new invoice
     const result = await prisma.$transaction(async (tx) => {
       // 1. Atomically reserve stock on variants if not already reserved
-      if (order.status === "AWAITING_ADMIN_REVIEW") {
+      if (order.status === "AWAITING_ADMIN_REVIEW" || order.status === "EXPIRED") {
         for (const item of order.items) {
           if (item.variantId) {
-            await tx.productVariant.update({
-              where: { id: item.variantId },
-              data: {
-                reservedStock: { increment: item.quantity },
-              },
-            });
+            const reserved = await tx.$executeRawUnsafe(
+              'UPDATE "product_variants" SET "reservedStock" = "reservedStock" + $1 ' +
+              'WHERE "id" = $2 AND "isActive" = TRUE AND ("stock" - "reservedStock") >= $3',
+              item.quantity,
+              item.variantId,
+              item.quantity
+            );
+            if (reserved !== 1) {
+              throw new ConflictError(
+                "Insufficient available stock to reserve " + item.productName +
+                " (size " + item.size + "). Refresh the order before issuing the invoice."
+              );
+            }
           }
         }
       }
@@ -467,7 +485,6 @@ export class CommerceService {
         upiId: settings.upiId,
         payeeName: settings.payeeName,
         paymentInstructions: settings.paymentInstructions,
-        rawToken: order.guestTokenHash, // Order token view
         expiresAt: holdExpiresAt,
       })
       .catch(() => {});
@@ -476,71 +493,114 @@ export class CommerceService {
   }
 
   /**
-   * Guest: Submit payment proof screenshot & UTR reference
+   * Guest: create a short-lived private-storage upload URL after verifying the opaque order token.
    */
-  async submitPaymentProof(input: SubmitPaymentProofInput) {
-    if (process.env.VERCEL === "1") {
-      throw new ServiceUnavailableError(
-        "Payment-proof uploads are unavailable until private persistent storage is configured."
-      );
-    }
-
+  async createPaymentProofUploadUrl(input: CreatePaymentProofUploadUrlInput) {
     const guestTokenHash = this.hashToken(input.token);
-    const order = await prisma.order.findUnique({
-      where: { guestTokenHash },
-    });
+    const order = await prisma.order.findUnique({ where: { guestTokenHash } });
 
     if (!order) {
       throw new NotFoundError("Order not found or invalid token.");
     }
-
-    if (
-      order.status !== "AWAITING_CUSTOMER_PAYMENT" &&
-      order.status !== "PAYMENT_PROOF_RECEIVED" &&
-      order.status !== "PAYMENT_UNDER_REVIEW"
-    ) {
-      throw new BadRequestError(`Cannot submit payment proof for order in status ${order.status}.`);
+    if (order.status !== "AWAITING_CUSTOMER_PAYMENT") {
+      throw new BadRequestError("Cannot upload a payment proof for an order in status " + order.status + ".");
     }
 
-    let finalUrl = input.url;
-    let storageKey = `proofs/${order.orderNumber}-${Date.now()}.jpg`;
-    let fileSizeBytes = 0;
+    const existingPendingProof = await prisma.paymentProof.findFirst({
+      where: { orderId: order.id, status: "PENDING_REVIEW" },
+    });
+    if (existingPendingProof) {
+      throw new ConflictError("A payment proof is already awaiting review for this order.");
+    }
 
-    if (input.fileBase64) {
+    return this.privateStorage.createSignedUploadUrl({
+      orderId: order.id,
+      mimeType: input.mimeType,
+      fileSizeBytes: input.fileSizeBytes,
+    });
+  }
+
+  /**
+   * Guest: persist payment-proof metadata only after a screenshot upload completes.
+   */
+  async submitPaymentProof(input: SubmitPaymentProofInput) {
+    if (process.env.VERCEL === "1" && input.fileBase64) {
+      throw new ServiceUnavailableError(
+        "On Vercel, upload the screenshot through the signed private-storage upload endpoint."
+      );
+    }
+
+    const guestTokenHash = this.hashToken(input.token);
+    const order = await prisma.order.findUnique({ where: { guestTokenHash } });
+
+    if (!order) {
+      throw new NotFoundError("Order not found or invalid token.");
+    }
+    if (order.status !== "AWAITING_CUSTOMER_PAYMENT") {
+      throw new BadRequestError("Cannot submit payment proof for order in status " + order.status + ".");
+    }
+
+    const existingPendingProof = await prisma.paymentProof.findFirst({
+      where: { orderId: order.id, status: "PENDING_REVIEW" },
+    });
+    if (existingPendingProof) {
+      throw new ConflictError("A payment proof is already awaiting review for this order.");
+    }
+
+    const duplicateUtr = await prisma.paymentProof.findFirst({
+      where: {
+        transactionReference: input.transactionReference,
+        status: { in: ["PENDING_REVIEW", "VERIFIED"] },
+      },
+    });
+    if (duplicateUtr) {
+      throw new ConflictError("This UTR / bank reference has already been submitted.");
+    }
+
+    const mimeType = input.mimeType || "image/jpeg";
+    let storageKey = input.storageKey || "";
+    let fileSizeBytes = input.fileSizeBytes || 0;
+
+    if (input.storageKey) {
+      const stored = await this.privateStorage.verifyUploadedObject({
+        orderId: order.id,
+        storageKey: input.storageKey,
+        mimeType,
+        fileSizeBytes,
+      });
+      fileSizeBytes = stored.fileSizeBytes;
+    } else if (input.fileBase64) {
       const cleanBase64 = input.fileBase64.replace(/^data:image\/[a-z]+;base64,/, "");
       const buffer = Buffer.from(cleanBase64, "base64");
-
-      if (buffer.length > 10 * 1024 * 1024) {
-        throw new BadRequestError("Proof image exceeds maximum size limit of 10MB.");
+      if (buffer.length < 1 || buffer.length > 10 * 1024 * 1024) {
+        throw new BadRequestError("Proof image must be between 1 byte and 10MB.");
       }
 
+      const extension = mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
+      storageKey = "proofs/" + crypto.randomUUID() + "." + extension;
       fileSizeBytes = buffer.length;
-      const diskPath = path.join(PROOFS_DIR, path.basename(storageKey));
-      await fs.writeFile(diskPath, buffer);
-    } else if (!finalUrl) {
-      throw new BadRequestError("Either fileBase64 or url must be provided.");
+      await fs.writeFile(path.join(PROOFS_DIR, path.basename(storageKey)), buffer);
+    } else {
+      throw new BadRequestError("A payment screenshot must be uploaded before submitting the proof.");
     }
 
-    // Persist proof and transition order status to PAYMENT_PROOF_RECEIVED
     const proof = await prisma.$transaction(async (tx) => {
       const p = await tx.paymentProof.create({
         data: {
           orderId: order.id,
           storageKey,
-          url: finalUrl || "pending",
-          mimeType: input.mimeType || "image/jpeg",
+          url: "pending",
+          mimeType,
           fileSizeBytes,
           status: "PENDING_REVIEW",
-          transactionReference: input.transactionReference || null,
+          transactionReference: input.transactionReference,
           adminNotes: input.notes || null,
         },
       });
 
-      // Protected URL route for secure retrieval
-      const protectedUrl = `/api/v1/orders/proofs/${p.id}/file`;
       const updatedProof = await tx.paymentProof.update({
         where: { id: p.id },
-        data: { url: protectedUrl },
+        data: { url: "/api/v1/orders/proofs/" + p.id + "/file" },
       });
 
       await tx.order.update({
@@ -554,7 +614,6 @@ export class CommerceService {
       return updatedProof;
     });
 
-    // Notify customer on WhatsApp acknowledging proof
     this.whatsappService
       .notifyPaymentProofReceived({
         id: order.id,
@@ -565,6 +624,83 @@ export class CommerceService {
       .catch(() => {});
 
     return proof;
+  }
+
+  /**
+   * Admin: reject an invalid payment proof and allow the customer to resubmit.
+   * Stock reservation and the payment hold are preserved.
+   */
+  async rejectPaymentProof(orderId: string, adminId: string | undefined, reason: string) {
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) {
+      throw new NotFoundError("Order '" + orderId + "' not found.");
+    }
+    if (order.status !== "PAYMENT_PROOF_RECEIVED" || order.paymentStatus !== "PROOF_RECEIVED") {
+      throw new BadRequestError(
+        "Cannot reject a payment proof when the order is in status " + order.status + "."
+      );
+    }
+
+    const pendingProof = await prisma.paymentProof.findFirst({
+      where: { orderId: order.id, status: "PENDING_REVIEW" },
+      orderBy: { receivedAt: "desc" },
+    });
+    if (!pendingProof) {
+      throw new BadRequestError("There is no pending payment proof to reject.");
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.order.updateMany({
+        where: {
+          id: order.id,
+          status: "PAYMENT_PROOF_RECEIVED",
+          paymentStatus: "PROOF_RECEIVED",
+        },
+        data: {
+          status: "AWAITING_CUSTOMER_PAYMENT",
+          paymentStatus: "REJECTED",
+        },
+      });
+      if (claimed.count !== 1) {
+        throw new ConflictError("The order changed while the proof was being reviewed. Refresh and try again.");
+      }
+
+      const rejected = await tx.paymentProof.updateMany({
+        where: {
+          id: pendingProof.id,
+          orderId: order.id,
+          status: "PENDING_REVIEW",
+        },
+        data: { status: "REJECTED", adminNotes: reason },
+      });
+      if (rejected.count !== 1) {
+        throw new ConflictError("The payment proof was already reviewed by another admin.");
+      }
+
+      await tx.auditEvent.create({
+        data: {
+          actorAdminId: adminId || null,
+          action: "PAYMENT_PROOF_REJECTED",
+          resourceType: "Order",
+          resourceId: order.id,
+          details: { proofId: pendingProof.id, reason },
+        },
+      });
+
+      return tx.order.findUniqueOrThrow({ where: { id: order.id } });
+    });
+
+    this.whatsappService
+      .notifyPaymentProofRejected({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        whatsappNumber: order.whatsappNumber,
+        reason,
+      })
+      .catch(() => {});
+
+    return result;
   }
 
   /**
@@ -580,26 +716,58 @@ export class CommerceService {
       throw new NotFoundError(`Order '${orderId}' not found.`);
     }
 
-    if (order.status === "PAID") {
-      throw new BadRequestError("This order has already been verified and marked as PAID.");
+    if (order.status !== "PAYMENT_PROOF_RECEIVED" && order.status !== "PAYMENT_UNDER_REVIEW") {
+      throw new BadRequestError(
+        "Cannot verify payment for an order in status " + order.status + ". A submitted proof is required."
+      );
+    }
+
+    if (!order.paymentProofs.some((proof) => proof.status === "PENDING_REVIEW")) {
+      throw new BadRequestError("Cannot mark this order as paid without a pending payment proof.");
+    }
+
+    const duplicateVerifiedUtr = await prisma.paymentProof.findFirst({
+      where: {
+        transactionReference: input.utrReference,
+        status: "VERIFIED",
+        orderId: { not: order.id },
+      },
+    });
+    if (duplicateVerifiedUtr) {
+      throw new ConflictError("This UTR / bank reference has already been verified against another order.");
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      // 1. Permanently decrement stock and release reservation on variants
+      const claimed = await tx.order.updateMany({
+        where: { id: order.id, status: order.status },
+        data: { status: "PAYMENT_UNDER_REVIEW" },
+      });
+      if (claimed.count !== 1) {
+        throw new ConflictError("This order changed while payment was being verified. Refresh and try again.");
+      }
+
+      // 1. Permanently decrement stock and release the reservation.
       for (const item of order.items) {
         if (item.variantId) {
-          await tx.productVariant.update({
-            where: { id: item.variantId },
+          const decremented = await tx.productVariant.updateMany({
+            where: {
+              id: item.variantId,
+              stock: { gte: item.quantity },
+              reservedStock: { gte: item.quantity },
+            },
             data: {
               stock: { decrement: item.quantity },
               reservedStock: { decrement: item.quantity },
             },
           });
+          if (decremented.count !== 1) {
+            throw new ConflictError("Inventory reservation is inconsistent for SKU " + item.sku + ". Payment was not marked as paid.");
+          }
         }
       }
 
       // 2. Mark pending payment proofs as VERIFIED
-      await tx.paymentProof.updateMany({
+      const verifiedProofs = await tx.paymentProof.updateMany({
         where: { orderId: order.id, status: "PENDING_REVIEW" },
         data: {
           status: "VERIFIED",
@@ -609,6 +777,9 @@ export class CommerceService {
           adminNotes: input.adminNotes || "Verified against bank settlement ledger",
         },
       });
+      if (verifiedProofs.count === 0) {
+        throw new ConflictError("The pending payment proof was already reviewed by another admin.");
+      }
 
       // 3. Mark order as PAID
       const ord = await tx.order.update({
@@ -659,8 +830,8 @@ export class CommerceService {
       throw new NotFoundError(`Order '${orderId}' not found.`);
     }
 
-    if (order.status !== "PAID" && order.status !== "PROCESSING" && order.status !== "SHIPPED") {
-      throw new BadRequestError(`Cannot dispatch shipment for order in status ${order.status}. Order must be PAID.`);
+    if (order.status !== "PAID" && order.status !== "PROCESSING") {
+      throw new BadRequestError("Cannot dispatch an order in status " + order.status + ". It must be paid and not already shipped.");
     }
 
     const shipment = await prisma.$transaction(async (tx) => {
@@ -865,8 +1036,13 @@ export class CommerceService {
               });
             }
           }
-        } else if (order.status === "AWAITING_CUSTOMER_PAYMENT" || order.status === "PAYMENT_PROOF_RECEIVED") {
-          // If only reserved stock hold was active, release reservedStock
+        } else if (
+          order.paymentStatus === "REQUESTED" ||
+          order.paymentStatus === "PROOF_RECEIVED" ||
+          order.paymentStatus === "UNDER_REVIEW" ||
+          order.paymentStatus === "REJECTED"
+        ) {
+          // The order is CANCELLATION_REQUESTED here; paymentStatus determines whether a reservation exists.
           for (const item of order.items) {
             if (item.variantId) {
               await tx.productVariant.update({
@@ -914,7 +1090,14 @@ export class CommerceService {
         return ord;
       } else {
         // REJECTED: restore previous status
-        const revertedStatus = order.paymentStatus === "VERIFIED" ? "PAID" : "AWAITING_CUSTOMER_PAYMENT";
+        const revertedStatus =
+          order.paymentStatus === "VERIFIED"
+            ? "PAID"
+            : order.paymentStatus === "PROOF_RECEIVED" || order.paymentStatus === "UNDER_REVIEW"
+              ? "PAYMENT_PROOF_RECEIVED"
+              : order.paymentStatus === "REQUESTED" || order.paymentStatus === "REJECTED"
+                ? "AWAITING_CUSTOMER_PAYMENT"
+                : "AWAITING_ADMIN_REVIEW";
 
         if (pendingRequest) {
           await tx.cancellationRequest.update({
@@ -1085,6 +1268,103 @@ export class CommerceService {
   /**
    * Admin: List all orders with filters & pagination
    */
+  /**
+   * Expire unpaid invoice holds and release inventory safely.
+   * A conditional status update claims each order so overlapping scheduled
+   * invocations or concurrent admin actions cannot release the same hold twice.
+   */
+  async expirePaymentHolds(batchSize = 100) {
+    const now = new Date();
+    const candidates = await prisma.order.findMany({
+      where: {
+        status: "AWAITING_CUSTOMER_PAYMENT",
+        paymentStatus: { in: ["REQUESTED", "REJECTED"] },
+        paymentHoldExpiresAt: { lte: now },
+      },
+      include: { items: true },
+      orderBy: { paymentHoldExpiresAt: "asc" },
+      take: Math.min(500, Math.max(1, batchSize)),
+    });
+
+    let expired = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const candidate of candidates) {
+      try {
+        const didExpire = await prisma.$transaction(async (tx) => {
+          const claimed = await tx.order.updateMany({
+            where: {
+              id: candidate.id,
+              status: "AWAITING_CUSTOMER_PAYMENT",
+              paymentStatus: { in: ["REQUESTED", "REJECTED"] },
+              paymentHoldExpiresAt: { lte: now },
+            },
+            data: {
+              status: "EXPIRED",
+              paymentStatus: "EXPIRED",
+              paymentHoldExpiresAt: null,
+            },
+          });
+
+          if (claimed.count !== 1) return false;
+
+          for (const item of candidate.items) {
+            if (!item.variantId) continue;
+
+            const released = await tx.productVariant.updateMany({
+              where: {
+                id: item.variantId,
+                reservedStock: { gte: item.quantity },
+              },
+              data: { reservedStock: { decrement: item.quantity } },
+            });
+
+            if (released.count !== 1) {
+              throw new ConflictError(
+                "Could not release the expired stock reservation for SKU " + item.sku +
+                ". Expiration was rolled back for manual review."
+              );
+            }
+          }
+
+          await tx.auditEvent.create({
+            data: {
+              actorAdminId: null,
+              action: "PAYMENT_HOLD_EXPIRED",
+              resourceType: "Order",
+              resourceId: candidate.id,
+              details: {
+                orderNumber: candidate.orderNumber,
+                previousPaymentStatus: candidate.paymentStatus,
+                expiredAt: now,
+              },
+            },
+          });
+
+          return true;
+        });
+
+        if (didExpire) expired += 1;
+        else skipped += 1;
+      } catch (error) {
+        failed += 1;
+        logger.error(
+          { error, orderId: candidate.id, orderNumber: candidate.orderNumber },
+          "Failed to expire payment hold and release inventory"
+        );
+      }
+    }
+
+    return {
+      checked: candidates.length,
+      expired,
+      skipped,
+      failed,
+      processedAt: now,
+    };
+  }
+
   async listAdminOrders(options: {
     status?: string;
     search?: string;
@@ -1244,9 +1524,18 @@ export class CommerceService {
       throw new ForbiddenError("Unauthorized access to payment proof file.");
     }
 
+    if (proof.storageKey.startsWith("orders/" + proof.orderId + "/proofs/")) {
+      const signedUrl = await this.privateStorage.createSignedDownloadUrl(proof.storageKey, 90);
+      return {
+        signedUrl,
+        mimeType: proof.mimeType || "image/jpeg",
+        fileName: path.basename(proof.storageKey),
+      };
+    }
+
     if (process.env.VERCEL === "1") {
       throw new ServiceUnavailableError(
-        "Payment-proof retrieval is unavailable until private persistent storage is configured."
+        "This legacy local proof file is not available on Vercel. New proofs must use private Supabase Storage."
       );
     }
 

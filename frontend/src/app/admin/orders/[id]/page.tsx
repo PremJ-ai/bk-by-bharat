@@ -7,6 +7,7 @@ import {
   getAdminOrderById,
   issueAdminInvoice,
   verifyAdminPayment,
+  rejectAdminPaymentProof,
   shipAdminOrder,
   decideAdminCancellation,
   processAdminRefund,
@@ -51,6 +52,8 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
   const [utrReference, setUtrReference] = useState("");
   const [verifierNotes, setVerifierNotes] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
+  const [proofRejectionReason, setProofRejectionReason] = useState("");
+  const [isRejectingProof, setIsRejectingProof] = useState(false);
 
   // Shipment State
   const [carrier, setCarrier] = useState("Blue Dart Apex Express");
@@ -146,6 +149,29 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
       setFeedback({ type: "error", message: err?.message || "Payment verification failed." });
     } finally {
       setIsVerifying(false);
+    }
+  };
+
+  const handleRejectPaymentProof = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!proofRejectionReason.trim()) {
+      setFeedback({ type: "error", message: "Enter the customer-facing reason for rejecting this proof." });
+      return;
+    }
+    try {
+      setIsRejectingProof(true);
+      setFeedback(null);
+      await rejectAdminPaymentProof(orderId, proofRejectionReason.trim());
+      setFeedback({
+        type: "success",
+        message: "Proof rejected. The customer can submit a corrected receipt; stock remains reserved.",
+      });
+      setProofRejectionReason("");
+      await loadOrderDetail();
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err?.message || "Failed to reject payment proof." });
+    } finally {
+      setIsRejectingProof(false);
     }
   };
 
@@ -410,6 +436,33 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
                 ))}
               </div>
             )}
+
+            {order.paymentProofs?.some((proof: any) => proof.status === "PENDING_REVIEW") && (
+              <form onSubmit={handleRejectPaymentProof} className="border-t border-border pt-4 space-y-3">
+                <label className="block text-[11px] uppercase tracking-caps text-muted">
+                  Reason to send to customer if proof is rejected
+                </label>
+                <textarea
+                  value={proofRejectionReason}
+                  onChange={(e) => setProofRejectionReason(e.target.value)}
+                  rows={2}
+                  required
+                  maxLength={500}
+                  placeholder="e.g. Screenshot does not show a successful transfer. Please upload the completed transaction receipt."
+                  className="w-full bg-canvas border border-border p-2 text-xs text-ink focus:border-gold focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={isRejectingProof}
+                  className="w-full border border-rust text-rust hover:bg-rust hover:text-white py-2.5 text-xs uppercase tracking-caps font-semibold disabled:opacity-50"
+                >
+                  {isRejectingProof ? "Rejecting Proof..." : "Reject Proof & Request Resubmission"}
+                </button>
+                <p className="text-[10px] text-muted">
+                  The customer's stock reservation is preserved. The customer can submit a replacement screenshot and UTR.
+                </p>
+              </form>
+            )}
           </div>
 
           {/* Section 4: Cancellation Requests & Refund Records */}
@@ -596,7 +649,11 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
 
               <button
                 type="submit"
-                disabled={isVerifying || isPaid}
+                disabled={
+                  isVerifying ||
+                  isPaid ||
+                  !order.paymentProofs?.some((proof: any) => proof.status === "PENDING_REVIEW")
+                }
                 className="w-full bg-stock-ok hover:bg-stock-ok/90 text-white py-2.5 text-xs uppercase tracking-caps font-semibold flex items-center justify-center space-x-2 transition-colors disabled:opacity-50"
               >
                 {isVerifying ? (
