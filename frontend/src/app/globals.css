@@ -3,6 +3,8 @@
 @tailwind utilities;
 
 :root {
+  --font-garamond: "EB Garamond", Georgia, "Times New Roman", serif;
+  --font-hanken: "Hanken Grotesk", "Segoe UI", Arial, sans-serif;
   --color-canvas: #FBF9F5;
   --color-surface: #FFFFFF;
   --color-surface-muted: #F1EEE8;
