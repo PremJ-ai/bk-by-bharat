@@ -140,7 +140,7 @@ publicOrdersRouter.get(
       res.setHeader("Content-Type", fileInfo.mimeType);
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("Cache-Control", "private, no-cache, no-store, must-revalidate");
-      if ("signedUrl" in fileInfo) {
+      if (fileInfo.signedUrl) {
         res.redirect(302, fileInfo.signedUrl);
         return;
       }
