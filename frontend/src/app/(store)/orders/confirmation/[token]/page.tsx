@@ -125,10 +125,13 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
         fileSizeBytes: proofFile.size,
       });
 
+      const uploadForm = new FormData();
+      uploadForm.append("cacheControl", "3600");
+      uploadForm.append("", proofFile);
       const uploadResponse = await fetch(uploadTicket.signedUploadUrl, {
         method: "PUT",
-        headers: { "Content-Type": proofFile.type },
-        body: proofFile,
+        headers: { "x-upsert": "false" },
+        body: uploadForm,
       });
       if (!uploadResponse.ok) {
         throw new Error("The screenshot could not be uploaded to secure storage. Please try again.");
@@ -148,6 +151,7 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
         message: "Payment proof submitted successfully. Our accounting desk is verifying the transaction.",
       });
       setProofFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       if (proofPreview) URL.revokeObjectURL(proofPreview);
       setProofPreview(null);
       setUtrReference("");
@@ -208,6 +212,7 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
 
   const isAwaitingReview = order.status === "AWAITING_ADMIN_REVIEW";
   const isAwaitingPayment = order.status === "AWAITING_CUSTOMER_PAYMENT";
+  const rejectedProof = order.paymentProofs?.find((proof) => proof.status === "REJECTED" && proof.reviewNote);
   const isProofReceived = order.status === "PAYMENT_PROOF_RECEIVED";
   const isPaid = order.status === "PAID" || order.status === "PROCESSING";
   const isShipped = order.status === "SHIPPED" || order.status === "DELIVERED";
@@ -375,6 +380,12 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
 
               {/* Payment Proof Upload Form */}
               <div className="md:col-span-7 space-y-4">
+                {isAwaitingPayment && rejectedProof?.reviewNote && (
+                  <div className="p-3 border border-rust/40 bg-rust/5 text-xs text-rust space-y-1">
+                    <strong className="block uppercase tracking-caps">Previous payment proof needs correction</strong>
+                    <span>{rejectedProof.reviewNote}</span>
+                  </div>
+                )}
                 <div className="space-y-1">
                   <h4 className="text-xs uppercase tracking-caps text-ink font-semibold">
                     Submit Payment Screenshot / UTR Reference

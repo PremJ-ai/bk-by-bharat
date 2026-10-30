@@ -320,6 +320,7 @@ export class CommerceService {
         status: p.status,
         transactionReference: p.transactionReference,
         receivedAt: p.receivedAt,
+        reviewNote: p.status === "REJECTED" ? p.adminNotes : null,
       })),
       shipments: order.shipments.map((s) => ({
         id: s.id,
@@ -618,6 +619,83 @@ export class CommerceService {
       .catch(() => {});
 
     return proof;
+  }
+
+  /**
+   * Admin: reject an invalid payment proof and allow the customer to resubmit.
+   * Stock reservation and the payment hold are preserved.
+   */
+  async rejectPaymentProof(orderId: string, adminId: string | undefined, reason: string) {
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) {
+      throw new NotFoundError("Order '" + orderId + "' not found.");
+    }
+    if (order.status !== "PAYMENT_PROOF_RECEIVED" || order.paymentStatus !== "PROOF_RECEIVED") {
+      throw new BadRequestError(
+        "Cannot reject a payment proof when the order is in status " + order.status + "."
+      );
+    }
+
+    const pendingProof = await prisma.paymentProof.findFirst({
+      where: { orderId: order.id, status: "PENDING_REVIEW" },
+      orderBy: { receivedAt: "desc" },
+    });
+    if (!pendingProof) {
+      throw new BadRequestError("There is no pending payment proof to reject.");
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.order.updateMany({
+        where: {
+          id: order.id,
+          status: "PAYMENT_PROOF_RECEIVED",
+          paymentStatus: "PROOF_RECEIVED",
+        },
+        data: {
+          status: "AWAITING_CUSTOMER_PAYMENT",
+          paymentStatus: "REJECTED",
+        },
+      });
+      if (claimed.count !== 1) {
+        throw new ConflictError("The order changed while the proof was being reviewed. Refresh and try again.");
+      }
+
+      const rejected = await tx.paymentProof.updateMany({
+        where: {
+          id: pendingProof.id,
+          orderId: order.id,
+          status: "PENDING_REVIEW",
+        },
+        data: { status: "REJECTED", adminNotes: reason },
+      });
+      if (rejected.count !== 1) {
+        throw new ConflictError("The payment proof was already reviewed by another admin.");
+      }
+
+      await tx.auditEvent.create({
+        data: {
+          actorAdminId: adminId || null,
+          action: "PAYMENT_PROOF_REJECTED",
+          resourceType: "Order",
+          resourceId: order.id,
+          details: { proofId: pendingProof.id, reason },
+        },
+      });
+
+      return tx.order.findUniqueOrThrow({ where: { id: order.id } });
+    });
+
+    this.whatsappService
+      .notifyPaymentProofRejected({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        whatsappNumber: order.whatsappNumber,
+        reason,
+      })
+      .catch(() => {});
+
+    return result;
   }
 
   /**

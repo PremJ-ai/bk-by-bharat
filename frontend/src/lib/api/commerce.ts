@@ -56,6 +56,7 @@ export interface PaymentProofModel {
   url: string;
   status: "PENDING_REVIEW" | "VERIFIED" | "REJECTED";
   transactionReference?: string | null;
+  reviewNote?: string | null;
   receivedAt: string;
 }
 
@@ -265,6 +266,17 @@ export async function issueAdminInvoice(
   const res = await apiClient<any>(`/admin/orders/${orderId}/invoice`, {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+  return res.data;
+}
+
+/**
+ * Admin: Reject Payment Proof and request a corrected submission.
+ */
+export async function rejectAdminPaymentProof(orderId: string, reason: string): Promise<any> {
+  const res = await apiClient<any>(`/admin/orders/${orderId}/reject-payment-proof`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
   });
   return res.data;
 }

@@ -11,6 +11,7 @@ import {
   submitPaymentProofSchema,
   createPaymentProofUploadUrlSchema,
   verifyPaymentSchema,
+  rejectPaymentProofSchema,
   createShipmentSchema,
   cancelOrderSchema,
   updatePaymentSettingsSchema,
@@ -223,6 +224,31 @@ adminOrdersRouter.post(
         meta: {
           requestId: req.requestId,
           message: "Verified invoice issued and payment hold initiated.",
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Admin: reject a payment proof and request a corrected submission.
+adminOrdersRouter.post(
+  "/:id/reject-payment-proof",
+  validateBody(rejectPaymentProofSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const adminId = req.adminUser?.id;
+      const result = await commerceService.rejectPaymentProof(
+        req.params.id,
+        adminId,
+        req.body.reason
+      );
+      res.status(200).json({
+        data: result,
+        meta: {
+          requestId: req.requestId,
+          message: "Payment proof rejected. The customer can submit a corrected proof; inventory remains reserved.",
         },
       });
     } catch (error) {

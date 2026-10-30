@@ -591,6 +591,27 @@ export class WhatsAppService {
     });
   }
 
+  async notifyPaymentProofRejected(order: {
+    id: string;
+    orderNumber: string;
+    customerName: string;
+    whatsappNumber: string;
+    reason: string;
+  }) {
+    const text =
+      "Namaste " + order.customerName + ",\\n\\n" +
+      "The payment proof submitted for Order " + order.orderNumber + " could not be verified.\\n\\n" +
+      "Reason: " + order.reason + "\\n\\n" +
+      "Please open the secure order-confirmation link from your original order message and submit a corrected screenshot and UTR. Your stock reservation is being held while you correct the proof.";
+
+    return this.sendOutboundMessage({
+      orderId: order.id,
+      recipientPhone: order.whatsappNumber,
+      templateName: "payment_proof_rejected",
+      bodyText: text,
+    });
+  }
+
   async notifyPaymentVerified(order: {
     id: string;
     orderNumber: string;

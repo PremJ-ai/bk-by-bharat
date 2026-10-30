@@ -71,6 +71,10 @@ export const verifyPaymentSchema = z.object({
   adminNotes: z.string().trim().max(500).optional(),
 });
 
+export const rejectPaymentProofSchema = z.object({
+  reason: z.string().trim().min(3, "A customer-facing rejection reason is required").max(500),
+});
+
 export type VerifyPaymentInput = z.infer<typeof verifyPaymentSchema>;
 
 export const createShipmentSchema = z.object({
