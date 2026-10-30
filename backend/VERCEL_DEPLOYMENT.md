@@ -11,6 +11,7 @@ Create a second Vercel project from the same GitHub repository:
 - Build Command: npm run vercel-build
 - Output Directory: leave empty/default
 - Install Command: use the monorepo default so the root npm lockfile/workspaces are respected
+- In Root Directory settings, keep **Include source files outside of the Root Directory** enabled. The monorepo npm workspace lockfile and root workspace definitions live one level above backend. Vercel documents this setting for apps that need shared source/config outside their project root.
 
 The serverless app entry point is src/index.ts and default-exports the Express application. src/server.ts remains the local server entry point.
 
