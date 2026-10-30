@@ -1,6 +1,6 @@
 import express, { type Application } from "express";
 import path from "node:path";
-import helmet from "helmet";
+import * as helmetModule from "helmet";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { env } from "./config/env.js";
@@ -20,7 +20,7 @@ export function createApp(): Application {
   }
 
   // Security headers
-  app.use(helmet());
+  app.use(helmetModule.default());
 
   // CORS configuration
   app.use(
@@ -28,11 +28,20 @@ export function createApp(): Application {
       origin:
         env.NODE_ENV === "production"
           ? [env.FRONTEND_ORIGIN]
-          : [env.FRONTEND_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000"],
+          : [
+              env.FRONTEND_ORIGIN,
+              "http://localhost:3000",
+              "http://127.0.0.1:3000",
+            ],
       credentials: true,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      allowedHeaders: ["Content-Type", "Authorization", "X-Request-Id", "X-CSRF-Token"],
-    })
+      allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        "X-Request-Id",
+        "X-CSRF-Token",
+      ],
+    }),
   );
 
   // Request correlation ID
@@ -45,7 +54,7 @@ export function createApp(): Application {
       verify: (req: any, _res, buf) => {
         req.rawBody = buf;
       },
-    })
+    }),
   );
   app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
@@ -54,15 +63,33 @@ export function createApp(): Application {
 
   // Root health endpoints for container orchestrators
   app.get("/health/live", (_req, res) => {
-    res.status(200).json({ status: "ok", uptime: process.uptime(), timestamp: new Date().toISOString() });
+    res
+      .status(200)
+      .json({
+        status: "ok",
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+      });
   });
 
   app.get("/health/ready", async (_req, res) => {
     const isDbHealthy = await checkDatabaseConnection();
     if (isDbHealthy) {
-      res.status(200).json({ status: "ready", database: "connected", timestamp: new Date().toISOString() });
+      res
+        .status(200)
+        .json({
+          status: "ready",
+          database: "connected",
+          timestamp: new Date().toISOString(),
+        });
     } else {
-      res.status(503).json({ status: "unavailable", database: "disconnected", timestamp: new Date().toISOString() });
+      res
+        .status(503)
+        .json({
+          status: "unavailable",
+          database: "disconnected",
+          timestamp: new Date().toISOString(),
+        });
     }
   });
 
@@ -71,7 +98,8 @@ export function createApp(): Application {
     res.status(403).json({
       error: {
         code: "FORBIDDEN",
-        message: "Direct static access to payment proof files is prohibited. Protected retrieval required.",
+        message:
+          "Direct static access to payment proof files is prohibited. Protected retrieval required.",
       },
     });
   });
