@@ -45,24 +45,36 @@ Do not set PORT for Vercel. It is used by the local Express server only.
 
 ## Supabase Storage setup for payment proofs
 
-In Supabase Dashboard → Storage → New bucket:
+In Supabase Dashboard → Storage, create two separate buckets:
 
+**Payment proofs**
 - Name: payment-proofs
 - Visibility: Private
 - Maximum file size: 10 MB
 - Allowed MIME types: image/jpeg, image/png, image/webp
 
-The application creates short-lived signed upload URLs and uploads the image directly from the customer’s browser to this private bucket. The service-role key is used only inside the backend. Proof retrieval is authorized by the customer’s opaque order token or a valid admin session and redirects to a short-lived signed download URL.
+The application creates short-lived signed upload URLs and uploads screenshots directly from the customer's browser to this private bucket. The service-role key is used only inside the backend. Proof retrieval is authorized by the customer's opaque order token or a valid admin session and redirects to a short-lived signed download URL.
 
-Do not make this bucket public.
+**Product media**
+- Name: product-media
+- Visibility: Public (product photographs are intended to appear on the storefront)
+- Maximum file size: 10 MB
+- Allowed MIME types: image/jpeg, image/png, image/webp, image/avif
+
+The admin panel requests a signed upload ticket from the authenticated backend, uploads the image directly to this bucket, and asks the backend to verify and register the completed media asset. Only the backend's service-role key can issue upload tickets.
+
+Never make the payment-proofs bucket public.
 
 ## Frontend connection
 
 In the existing frontend Vercel project, set:
 
 - API_BASE_URL=https://<backend-domain>/api/v1
+- NEXT_PUBLIC_SUPABASE_ANON_KEY=<Supabase publishable/anon key>
 
-Redeploy the frontend after setting it. The frontend's Next.js rewrite forwards browser /api/v1/* requests to the backend.
+The Supabase anon/publishable key is designed to be public and is used only by the browser to complete signed uploads. Never put SUPABASE_SERVICE_ROLE_KEY in the frontend project.
+
+Redeploy the frontend after setting these values. The frontend's Next.js rewrite forwards browser /api/v1/* requests to the backend.
 
 ## Database and first admin
 

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ProductCard } from "@/components/product/ProductCard";
 import type { ProductViewModel } from "@/components/product/product.types";
 import { createAdminProduct } from "@/lib/api/catalog";
-import { generateAiMedia, uploadMediaAsset } from "@/lib/api/media";
+import { createProductMediaUploadUrl, generateAiMedia, uploadMediaAsset } from "@/lib/api/media";
 import {
   ArrowLeft,
   Sparkles,
@@ -77,7 +77,7 @@ export default function NewProductPage() {
     }
   };
 
-  // Direct file upload handler
+  // Upload product imagery directly to the public Supabase product-media bucket.
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -86,28 +86,54 @@ export default function NewProductPage() {
       setIsUploading(true);
       setFeedback(null);
 
-      const reader = new FileReader();
-      reader.onload = async () => {
-        try {
-          const base64 = reader.result as string;
-          const asset = await uploadMediaAsset({
-            fileName: file.name,
-            mimeType: file.type || "image/jpeg",
-            fileBase64: base64,
-            altText: `${name} - ${file.name}`,
-          });
-          setGeneratedImage(asset.url);
-          setImageApproved(true);
-        } catch (uploadErr: any) {
-          setFeedback({ type: "error", message: uploadErr?.message || "Upload failed." });
-        } finally {
-          setIsUploading(false);
-        }
-      };
-      reader.readAsDataURL(file);
+      const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/avif"];
+      if (!allowedTypes.includes(file.type)) {
+        throw new Error("Choose a JPEG, PNG, WebP, or AVIF product image.");
+      }
+      if (file.size < 1 || file.size > 10 * 1024 * 1024) {
+        throw new Error("Product images must be between 1 byte and 10MB.");
+      }
+
+      const uploadTicket = await createProductMediaUploadUrl({
+        mimeType: file.type as "image/jpeg" | "image/png" | "image/webp" | "image/avif",
+        fileSizeBytes: file.size,
+      });
+
+      const publicKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (!publicKey) {
+        throw new Error("Product image storage is not configured. Contact the site administrator.");
+      }
+
+      const uploadForm = new FormData();
+      uploadForm.append("cacheControl", "3600");
+      uploadForm.append("", file);
+      const uploadResponse = await fetch(uploadTicket.signedUploadUrl, {
+        method: "PUT",
+        headers: {
+          apikey: publicKey,
+          Authorization: "Bearer " + publicKey,
+          "x-upsert": "false",
+        },
+        body: uploadForm,
+      });
+      if (!uploadResponse.ok) {
+        throw new Error("Supabase could not store this product image. Please try again.");
+      }
+
+      const asset = await uploadMediaAsset({
+        fileName: file.name,
+        mimeType: file.type as "image/jpeg" | "image/png" | "image/webp" | "image/avif",
+        storageKey: uploadTicket.storageKey,
+        fileSizeBytes: file.size,
+        altText: name + " - " + file.name,
+      });
+      setGeneratedImage(asset.url);
+      setImageApproved(true);
     } catch (err: any) {
-      setFeedback({ type: "error", message: err?.message || "File reading failed." });
+      setFeedback({ type: "error", message: err?.message || "Upload failed." });
+    } finally {
       setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 

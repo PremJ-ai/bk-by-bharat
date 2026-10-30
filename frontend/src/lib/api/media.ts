@@ -26,11 +26,25 @@ export async function generateAiMedia(data: {
   return res.data;
 }
 
+export async function createProductMediaUploadUrl(data: {
+  mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/avif";
+  fileSizeBytes: number;
+}): Promise<{ signedUploadUrl: string; storageKey: string; publicUrl: string }> {
+  const res = await apiClient<{ signedUploadUrl: string; storageKey: string; publicUrl: string }>(
+    "/admin/media/upload-url",
+    {
+      method: "POST",
+      body: JSON.stringify(data),
+    }
+  );
+  return res.data;
+}
+
 export async function uploadMediaAsset(data: {
   fileName: string;
-  mimeType: string;
-  fileBase64?: string;
-  url?: string;
+  mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/avif";
+  storageKey: string;
+  fileSizeBytes: number;
   altText: string;
 }): Promise<MediaAssetDto> {
   const res = await apiClient<MediaAssetDto>("/admin/media/upload", {

@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { prisma } from "../../db/prisma.js";
 import { getMediaGenerationProvider } from "./media.provider.js";
+import { SupabasePublicMediaStorage } from "../storage/supabase-public-media-storage.js";
 import { BadRequestError, NotFoundError, ServiceUnavailableError } from "../../lib/errors.js";
 
 const UPLOADS_DIR = path.resolve(process.cwd(), "uploads");
@@ -12,6 +13,14 @@ fs.mkdir(UPLOADS_DIR, { recursive: true }).catch(() => {});
 
 export class MediaService {
   private readonly provider = getMediaGenerationProvider();
+  private readonly publicMediaStorage = new SupabasePublicMediaStorage();
+
+  /**
+   * Create an admin-only signed upload ticket for the public product-media bucket.
+   */
+  async createMediaUploadUrl(input: { mimeType: string; fileSizeBytes: number }) {
+    return this.publicMediaStorage.createSignedUploadUrl(input);
+  }
 
   /**
    * Request AI image generation draft for a product
@@ -95,10 +104,20 @@ export class MediaService {
     fileName: string;
     mimeType: string;
     fileBase64?: string;
+    storageKey?: string;
+    fileSizeBytes?: number;
     url?: string;
     altText: string;
   }) {
-    const { fileName, mimeType, fileBase64, url, altText } = options;
+    const {
+      fileName,
+      mimeType,
+      fileBase64,
+      storageKey: uploadedStorageKey,
+      fileSizeBytes: uploadedFileSize,
+      url,
+      altText,
+    } = options;
 
     if (process.env.VERCEL === "1" && fileBase64) {
       throw new ServiceUnavailableError(
@@ -115,7 +134,19 @@ export class MediaService {
     let storageKey = `uploads/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.-]/g, "_")}`;
     let fileSizeBytes = 0;
 
-    if (fileBase64) {
+    if (uploadedStorageKey) {
+      if (!uploadedFileSize) {
+        throw new BadRequestError("Uploaded product image size is required.");
+      }
+      const stored = await this.publicMediaStorage.verifyUploadedObject({
+        storageKey: uploadedStorageKey,
+        mimeType,
+        fileSizeBytes: uploadedFileSize,
+      });
+      storageKey = uploadedStorageKey;
+      finalUrl = stored.publicUrl;
+      fileSizeBytes = stored.fileSizeBytes;
+    } else if (fileBase64) {
       const cleanBase64 = fileBase64.replace(/^data:image\/[a-z]+;base64,/, "");
       const buffer = Buffer.from(cleanBase64, "base64");
 
