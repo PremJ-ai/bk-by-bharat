@@ -128,9 +128,18 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
       const uploadForm = new FormData();
       uploadForm.append("cacheControl", "3600");
       uploadForm.append("", proofFile);
+      const supabasePublicKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (!supabasePublicKey) {
+        throw new Error("Payment screenshot uploads are not configured. Please contact the atelier.");
+      }
+
       const uploadResponse = await fetch(uploadTicket.signedUploadUrl, {
         method: "PUT",
-        headers: { "x-upsert": "false" },
+        headers: {
+          apikey: supabasePublicKey,
+          Authorization: "Bearer " + supabasePublicKey,
+          "x-upsert": "false",
+        },
         body: uploadForm,
       });
       if (!uploadResponse.ok) {
