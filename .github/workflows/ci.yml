@@ -52,6 +52,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate Prisma Client
+        run: npm run prisma:generate --workspace=backend
+
       - name: Apply migrations to isolated test database
         run: npm run prisma:deploy --workspace=backend
 
