@@ -1034,7 +1034,8 @@ export class CommerceService {
         } else if (
           order.paymentStatus === "REQUESTED" ||
           order.paymentStatus === "PROOF_RECEIVED" ||
-          order.paymentStatus === "UNDER_REVIEW"
+          order.paymentStatus === "UNDER_REVIEW" ||
+          order.paymentStatus === "REJECTED"
         ) {
           // The order is CANCELLATION_REQUESTED here; paymentStatus determines whether a reservation exists.
           for (const item of order.items) {
@@ -1089,7 +1090,7 @@ export class CommerceService {
             ? "PAID"
             : order.paymentStatus === "PROOF_RECEIVED" || order.paymentStatus === "UNDER_REVIEW"
               ? "PAYMENT_PROOF_RECEIVED"
-              : order.paymentStatus === "REQUESTED"
+              : order.paymentStatus === "REQUESTED" || order.paymentStatus === "REJECTED"
                 ? "AWAITING_CUSTOMER_PAYMENT"
                 : "AWAITING_ADMIN_REVIEW";
 
