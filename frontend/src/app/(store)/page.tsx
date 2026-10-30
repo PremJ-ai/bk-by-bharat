@@ -21,6 +21,8 @@ export default async function StorefrontHomePage() {
   });
 
   const displayProducts = products && products.length > 0 ? products : MOCK_STOREFRONT_FIXTURES;
+  const heroProduct =
+    displayProducts.find((product) => product.slug.toLowerCase().includes("gurkha")) || displayProducts[0];
 
   return (
     <div className="min-h-screen flex flex-col bg-canvas">
@@ -32,7 +34,7 @@ export default async function StorefrontHomePage() {
 
       <main className="flex-1">
         {/* 3. Hero / Brand Landing */}
-        <CampaignHero />
+        <CampaignHero imageUrl={heroProduct?.imageUrl} imageAlt={heroProduct?.imageAlt || heroProduct?.name || "Bharat Atelier menswear"} />
 
         {/* 4. Marquee Ticker */}
         <MarqueeTicker />

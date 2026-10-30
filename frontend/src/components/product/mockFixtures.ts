@@ -33,8 +33,8 @@ export const MOCK_PRODUCTS: DetailedProduct[] = [
     description: "Relaxed silhouette with an open convertible collar and natural mother-of-pearl buttons.",
     longDescription:
       "Crafted from premium long-staple flax grown in Flanders, this summer staple is washed with natural enzymes for a softened hand. Features single-needle stitching throughout, clean French seams, and a generous box pleat at the yoke for unrestricted movement.",
-    imageUrl: "",
-    galleryImages: [],
+    imageUrl: "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=1200&q=85",
+    galleryImages: ["https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=1200&q=85"],
     sizes: [
       { size: "S", stock: 8, available: true },
       { size: "M", stock: 12, available: true },
@@ -76,8 +76,8 @@ export const MOCK_PRODUCTS: DetailedProduct[] = [
     description: "Traditional dual-buckle waistband with deep outward-facing double pleats and a relaxed taper.",
     longDescription:
       "A tribute to classic military tailoring, recut for modern proportion. Cut from substantial 340gsm Irish linen with distinctive slub texture, these trousers feature an extended crossover waistband secured with solid antiqued brass hardware.",
-    imageUrl: "",
-    galleryImages: [],
+    imageUrl: "https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?auto=format&fit=crop&w=1200&q=85",
+    galleryImages: ["https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?auto=format&fit=crop&w=1200&q=85"],
     sizes: [
       { size: "30", stock: 4, available: true },
       { size: "32", stock: 10, available: true },
@@ -119,8 +119,8 @@ export const MOCK_PRODUCTS: DetailedProduct[] = [
     description: "Curved hem tunic featuring a structured stand collar and concealed mother-of-pearl placket.",
     longDescription:
       "Spun from rare extra-long staple Giza 87 cotton harvested along the Nile delta. The high-twist yarn yields an exceptionally smooth, lustrous drape that resists creasing. Tailored with a clean hidden placket for a minimalist, modern aesthetic.",
-    imageUrl: "",
-    galleryImages: [],
+    imageUrl: "https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?auto=format&fit=crop&w=1200&q=85",
+    galleryImages: ["https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?auto=format&fit=crop&w=1200&q=85"],
     sizes: [
       { size: "S", stock: 2, available: true },
       { size: "M", stock: 3, available: true },
@@ -159,8 +159,8 @@ export const MOCK_PRODUCTS: DetailedProduct[] = [
     description: "Clean single-pleat trouser crafted from dense Kurabo cotton drill with buttoned flap pockets.",
     longDescription:
       "Woven slowly on shuttle looms in Okayama, Japan. The dense 320gsm drill fabric possesses structural weight that maintains a crisp center crease while softening gracefully with wear.",
-    imageUrl: "",
-    galleryImages: [],
+    imageUrl: "https://images.unsplash.com/photo-1473966968600-fa801b869a1a?auto=format&fit=crop&w=1200&q=85",
+    galleryImages: ["https://images.unsplash.com/photo-1473966968600-fa801b869a1a?auto=format&fit=crop&w=1200&q=85"],
     sizes: [
       { size: "30", stock: 6, available: true },
       { size: "32", stock: 14, available: true },
@@ -200,8 +200,8 @@ export const MOCK_PRODUCTS: DetailedProduct[] = [
     description: "Soft shoulder 3-roll-2 jacket with patch pockets and hand-sewn Milanese buttonhole.",
     longDescription:
       "Constructed entirely without shoulder pads or stiff chest canvas. The garment takes the natural shape of the wearer, providing formal elegance with the breathability of lightweight outerwear.",
-    imageUrl: "",
-    galleryImages: [],
+    imageUrl: "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=1200&q=85",
+    galleryImages: ["https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=1200&q=85"],
     sizes: [
       { size: "38R", stock: 3, available: true },
       { size: "40R", stock: 5, available: true },
@@ -240,8 +240,8 @@ export const MOCK_PRODUCTS: DetailedProduct[] = [
     description: "Textured raw silk utility overshirt with twin chest bellow pockets and straight hem.",
     longDescription:
       "Hand-spun from unrefined mulberry cocoons in West Bengal. Matka silk features an earthy, irregular slub texture resembling fine linen, yet retains the thermal warmth and natural luster unique to wild silk.",
-    imageUrl: "",
-    galleryImages: [],
+    imageUrl: "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1200&q=85",
+    galleryImages: ["https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&w=1200&q=85"],
     sizes: [
       { size: "S", stock: 1, available: true },
       { size: "M", stock: 4, available: true },

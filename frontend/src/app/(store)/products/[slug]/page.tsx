@@ -89,6 +89,15 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
     notFound();
   }
 
+  const productImages = Array.from(
+    new Set(
+      [product.imageUrl, ...(product.galleryImages || [])].filter(
+        (imageUrl): imageUrl is string => Boolean(imageUrl)
+      )
+    )
+  );
+  const activeImageUrl = productImages[activeImageIndex] || product.imageUrl;
+
   const selectedSizeObj = product.sizes?.find((s) => s.size === selectedSize);
   const isAvailable = selectedSizeObj?.available ?? false;
 
@@ -159,7 +168,7 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
               <ParallaxFrame speed={0.04}>
                 <div className="relative aspect-[4/5] bg-surface-muted border border-border overflow-hidden">
                   <ProductMedia
-                    src={product.imageUrl}
+                    src={activeImageUrl}
                     alt={product.name}
                     priority={true}
                     aspectRatio="aspect-[4/5]"
@@ -175,26 +184,32 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
               </ParallaxFrame>
             </EditorialCropReveal>
 
-            {/* Gallery Thumbnail Staging */}
-            <div className="grid grid-cols-4 gap-3">
-              {[0, 1, 2, 3].map((idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setActiveImageIndex(idx)}
-                  className={`aspect-[4/5] bg-surface-muted border transition-all flex items-center justify-center text-xs text-muted/50 ${
-                    activeImageIndex === idx
-                      ? "border-navy ring-1 ring-navy"
-                      : "border-border hover:border-gold"
-                  }`}
-                  aria-label={`View angle ${idx + 1}`}
-                >
-                  <span className="font-display text-sm">
-                    0{idx + 1}
-                  </span>
-                </button>
-              ))}
-            </div>
+            {/* Actual product-image thumbnails from the catalog media gallery */}
+            {productImages.length > 1 && (
+              <div className="grid grid-cols-4 gap-3">
+                {productImages.slice(0, 4).map((imageUrl, idx) => (
+                  <button
+                    key={imageUrl}
+                    type="button"
+                    onClick={() => setActiveImageIndex(idx)}
+                    className={`aspect-[4/5] bg-surface-muted border transition-all overflow-hidden ${
+                      activeImageIndex === idx
+                        ? "border-navy ring-1 ring-navy"
+                        : "border-border hover:border-gold"
+                    }`}
+                    aria-label={`View product image ${idx + 1}`}
+                    aria-pressed={activeImageIndex === idx}
+                  >
+                    <img
+                      src={imageUrl}
+                      alt={`${product.name} — view ${idx + 1}`}
+                      loading="lazy"
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Right: Purchase & Story Column (5 cols) */}
