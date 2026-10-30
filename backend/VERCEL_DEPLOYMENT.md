@@ -85,7 +85,7 @@ Redeploy the frontend after setting these values. The frontend's Next.js rewrite
 
 ## Automatic payment-hold expiry
 
-The backend includes a Vercel Cron job at `/api/v1/maintenance/expire-payment-holds` that runs every 15 minutes. It expires unpaid invoices after their payment hold deadline and releases reserved variant stock in the same database transaction. The endpoint requires the `CRON_SECRET` bearer token. Admins can issue a fresh invoice for an expired order; the stock is reserved again only after availability is checked.
+The backend includes a Vercel Cron job at `/api/v1/maintenance/expire-payment-holds` that runs daily at 00:00 UTC (`0 0 * * *`, as configured in `backend/vercel.json`). It expires unpaid invoices after their payment hold deadline and releases reserved variant stock in the same database transaction. The endpoint requires the `CRON_SECRET` bearer token. Admins can issue a fresh invoice for an expired order; the stock is reserved again only after availability is checked.
 
 Vercel's Hobby plan only permits one cron run per day and is restricted to personal, non-commercial use. A commercial clothing store should use a plan that permits commercial use and sub-daily scheduling, such as Pro. See [Vercel Cron usage limits](https://vercel.com/docs/cron-jobs/usage-and-pricing) and the [Hobby plan](https://vercel.com/docs/plans/hobby).
 
