@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "vercel-build": "prisma generate && node scripts/migrate-preview.mjs && npm run build",
+    "vercel-build": "prisma generate && node scripts/migrate-vercel.mjs && npm run build",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --no-file-parallelism",

@@ -388,9 +388,10 @@ for each workspace.
 - **Output Directory:** leave unset; Vercel creates the Express Function.
 - **Routing:** [`backend/vercel.json`](./backend/vercel.json) explicitly builds `src/index.ts` with
   `@vercel/node` and routes requests to that function; it retains the existing scheduled task.
-- **Runtime:** choose Node.js 22. `vercel-build` applies pending migrations only when
-  `VERCEL_ENV=preview`, using the Vercel Preview-scoped `DATABASE_URL`; local and Production builds
-  skip automatic migrations. Production schema changes remain a separate, controlled release step.
+- **Runtime:** choose Node.js 22. `vercel-build` applies pending migrations on Preview using its
+  Preview-scoped `DATABASE_URL`. Local builds and Production builds skip migrations by default.
+  A Production migration runs only when `APPLY_PRODUCTION_MIGRATIONS=true` is explicitly set for a
+  Production build; remove that opt-in immediately after the approved migration deployment.
 - The API remains mounted under `/api/v1`; local HTTP serving continues to use `src/server.ts`.
 
 The frontend API calls use a same-origin rewrite, which keeps the admin cookie on the storefront
