@@ -11,10 +11,12 @@ export function MarqueeTicker() {
   return (
     <div
       tabIndex={0}
-      aria-label="Fabric and Craftsmanship Features"
-      className="bg-surface-muted border-b border-border py-3.5 overflow-hidden focus:outline-none focus:ring-1 focus:ring-focus select-none"
+      role="region"
+      aria-label="Fabric and craftsmanship features. Focus or hover to pause."
+      className="marquee-container bg-surface-muted border-b border-border py-3.5 overflow-hidden focus:outline-none focus-visible:ring-1 focus-visible:ring-focus select-none"
     >
-      <div className="animate-ticker flex space-x-12 whitespace-nowrap text-xs uppercase tracking-[0.2em] text-muted font-medium">
+      <span className="sr-only">{items.join(". ")}</span>
+      <div aria-hidden="true" className="animate-ticker flex space-x-12 whitespace-nowrap text-xs uppercase tracking-[0.2em] text-muted font-medium">
         {/* Repeat twice for continuous loop effect */}
         {[...items, ...items].map((text, idx) => (
           <div key={idx} className="flex items-center space-x-12">

@@ -1,19 +1,144 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import Link from "next/link";
 import { useCart } from "@/context/CartContext";
 import { formatINR } from "@/components/product/ProductCard";
 import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight } from "lucide-react";
+import { gsap, isReducedMotion, MOTION_TOKENS } from "@/lib/motion/gsap";
 
 export function CartDrawer() {
   const { items, isOpen, closeCart, removeItem, updateQuantity, subtotalPaise, itemCount } = useCart();
+  const [isMounted, setIsMounted] = useState(false);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const previousOverflowRef = useRef("");
+
+  const animateRemoveItem = (id: string, event: MouseEvent<HTMLButtonElement>) => {
+    const row = event.currentTarget.closest<HTMLElement>("[data-cart-line]");
+    if (!row || isReducedMotion()) {
+      removeItem(id);
+      return;
+    }
+
+    row.style.pointerEvents = "none";
+    gsap.to(row, {
+      height: 0,
+      opacity: 0,
+      paddingTop: 0,
+      paddingBottom: 0,
+      duration: MOTION_TOKENS.durations.ui,
+      ease: MOTION_TOKENS.eases.ui,
+      onComplete: () => removeItem(id),
+    });
+  };
+
+  const changeQuantity = (id: string, delta: number, event: MouseEvent<HTMLButtonElement>) => {
+    const item = items.find((cartItem) => cartItem.id === id);
+    if (!item) return;
+    if (item.quantity + delta <= 0) {
+      animateRemoveItem(id, event);
+      return;
+    }
+
+    updateQuantity(id, delta);
+    if (!isReducedMotion()) {
+      const quantity = event.currentTarget.closest("[data-cart-line]")?.querySelector("[data-quantity]");
+      if (quantity) {
+        gsap.fromTo(
+          quantity,
+          { opacity: 0.65, scale: 0.92 },
+          { opacity: 1, scale: 1, duration: MOTION_TOKENS.durations.ui, ease: MOTION_TOKENS.eases.ui }
+        );
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      if (!isMounted) {
+        returnFocusRef.current = document.activeElement as HTMLElement | null;
+        setIsMounted(true);
+        return;
+      }
+
+      closeButtonRef.current?.focus();
+      if (isReducedMotion()) return;
+
+      const timeline = gsap.timeline();
+      timeline.fromTo(
+        backdropRef.current,
+        { opacity: 0 },
+        { opacity: 1, duration: MOTION_TOKENS.durations.ui, ease: MOTION_TOKENS.eases.ui }
+      );
+      timeline.fromTo(
+        panelRef.current,
+        { x: 32, opacity: 0.9 },
+        { x: 0, opacity: 1, duration: MOTION_TOKENS.durations.reveal, ease: MOTION_TOKENS.eases.reveal },
+        0
+      );
+      return () => {
+        timeline.kill();
+      };
+    }
+
+    if (!isMounted) return;
+    if (isReducedMotion()) {
+      setIsMounted(false);
+      returnFocusRef.current?.focus();
+      return;
+    }
+
+    const timeline = gsap.timeline({
+      onComplete: () => {
+        setIsMounted(false);
+        returnFocusRef.current?.focus();
+      },
+    });
+    timeline.to(backdropRef.current, {
+      opacity: 0,
+      duration: MOTION_TOKENS.durations.ui,
+      ease: MOTION_TOKENS.eases.ui,
+    });
+    timeline.to(
+      panelRef.current,
+      {
+        x: 32,
+        opacity: 0.9,
+        duration: MOTION_TOKENS.durations.ui,
+        ease: MOTION_TOKENS.eases.ui,
+      },
+      0
+    );
+    return () => {
+      timeline.kill();
+    };
+  }, [isOpen, isMounted]);
 
   // Close on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isOpen) {
         closeCart();
+        return;
+      }
+
+      if (e.key === "Tab" && isOpen && panelRef.current) {
+        const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -23,22 +148,24 @@ export function CartDrawer() {
   // Lock body scroll when drawer is open
   useEffect(() => {
     if (isOpen) {
+      previousOverflowRef.current = document.body.style.overflow;
       document.body.style.overflow = "hidden";
     } else {
-      document.body.style.overflow = "";
+      document.body.style.overflow = previousOverflowRef.current;
     }
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = previousOverflowRef.current;
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isMounted) return null;
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
       {/* Ambient Scrim */}
       <div
-        className="absolute inset-0 bg-navy-strong/60 backdrop-blur-xs transition-opacity duration-300"
+        ref={backdropRef}
+        className="absolute inset-0 bg-navy-strong/60 backdrop-blur-xs"
         onClick={closeCart}
         aria-hidden="true"
       />
@@ -50,7 +177,7 @@ export function CartDrawer() {
         aria-label="Shopping Bag"
         className="absolute inset-y-0 right-0 max-w-full flex pl-10"
       >
-        <div className="w-screen max-w-md bg-surface border-l border-border flex flex-col justify-between shadow-2xl">
+        <div ref={panelRef} className="w-screen max-w-md bg-surface border-l border-border flex flex-col justify-between shadow-2xl will-change-transform">
           {/* Drawer Header */}
           <div className="px-6 py-5 border-b border-border flex items-center justify-between bg-canvas">
             <div className="flex items-center space-x-2">
@@ -63,6 +190,7 @@ export function CartDrawer() {
               </span>
             </div>
             <button
+              ref={closeButtonRef}
               type="button"
               onClick={closeCart}
               className="p-1.5 text-muted hover:text-ink transition-colors rounded focus:outline-none focus:ring-1 focus:ring-focus"
@@ -98,7 +226,7 @@ export function CartDrawer() {
             ) : (
               <div className="divide-y divide-border/60">
                 {items.map((item) => (
-                  <div key={item.id} className="py-4 first:pt-0 last:pb-0 flex space-x-4">
+                  <div data-cart-line key={item.id} className="overflow-hidden py-4 first:pt-0 last:pb-0 flex space-x-4">
                     {/* Item Thumbnail */}
                     <div className="w-20 h-24 bg-surface-muted border border-border flex-shrink-0 flex items-center justify-center relative overflow-hidden">
                       {item.imageUrl ? (
@@ -123,7 +251,7 @@ export function CartDrawer() {
                           </h4>
                           <button
                             type="button"
-                            onClick={() => removeItem(item.id)}
+                            onClick={(event) => animateRemoveItem(item.id, event)}
                             className="text-muted hover:text-rust transition-colors p-1 -mr-1"
                             title="Remove line"
                             aria-label={`Remove ${item.name} from bag`}
@@ -150,18 +278,18 @@ export function CartDrawer() {
                         <div className="inline-flex items-center border border-border">
                           <button
                             type="button"
-                            onClick={() => updateQuantity(item.id, -1)}
+                            onClick={(event) => changeQuantity(item.id, -1, event)}
                             className="p-1 hover:bg-surface-muted transition-colors text-muted hover:text-ink focus:outline-none"
                             aria-label="Decrease quantity"
                           >
                             <Minus className="w-3 h-3" />
                           </button>
-                          <span className="px-2 text-xs font-semibold tabular-nums text-ink">
+                          <span data-quantity className="px-2 text-xs font-semibold tabular-nums text-ink">
                             {item.quantity}
                           </span>
                           <button
                             type="button"
-                            onClick={() => updateQuantity(item.id, 1)}
+                            onClick={(event) => changeQuantity(item.id, 1, event)}
                             className="p-1 hover:bg-surface-muted transition-colors text-muted hover:text-ink focus:outline-none"
                             aria-label="Increase quantity"
                           >

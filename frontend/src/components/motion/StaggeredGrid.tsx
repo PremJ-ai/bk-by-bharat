@@ -13,12 +13,14 @@ interface StaggeredGridProps {
   children: React.ReactNode;
   className?: string;
   stagger?: number;
+  productGrid?: boolean;
 }
 
 export function StaggeredGrid({
   children,
   className = "",
   stagger = 0.06,
+  productGrid = false,
 }: StaggeredGridProps) {
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -35,19 +37,24 @@ export function StaggeredGrid({
         items,
         {
           opacity: 0,
-          y: 20,
+          y: 24,
+          scale: 0.96,
+          willChange: "transform, opacity",
         },
         {
           opacity: 1,
           y: 0,
+          scale: 1,
           duration: MOTION_TOKENS.durations.reveal,
           ease: MOTION_TOKENS.eases.reveal,
           stagger,
           scrollTrigger: {
             trigger: gridRef.current,
-            start: "top 85%",
+            start: "top 88%",
             once: true,
+            invalidateOnRefresh: true,
           },
+          clearProps: "willChange",
         }
       );
     },
@@ -55,7 +62,7 @@ export function StaggeredGrid({
   );
 
   return (
-    <div ref={gridRef} className={className}>
+    <div ref={gridRef} className={className} data-product-grid={productGrid ? "" : undefined}>
       {children}
     </div>
   );

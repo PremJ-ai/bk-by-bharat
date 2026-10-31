@@ -3,6 +3,8 @@
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { ScrollSmoother } from "gsap/ScrollSmoother";
+import { Draggable } from "gsap/Draggable";
+import { useGSAP } from "@gsap/react";
 
 // Motion Tokens according to design.md Section 6
 export const MOTION_TOKENS = {
@@ -36,7 +38,7 @@ export function registerGsapPlugins(): {
 
   if (!isRegistered) {
     try {
-      gsap.registerPlugin(ScrollTrigger, ScrollSmoother);
+      gsap.registerPlugin(ScrollTrigger, ScrollSmoother, Draggable, useGSAP);
       isRegistered = true;
     } catch (err) {
       console.warn("GSAP plugin registration warning:", err);
@@ -65,4 +67,4 @@ export function isTouchDevice(): boolean {
   return "ontouchstart" in window || navigator.maxTouchPoints > 0;
 }
 
-export { gsap, ScrollTrigger, ScrollSmoother };
+export { gsap, ScrollTrigger, ScrollSmoother, Draggable };

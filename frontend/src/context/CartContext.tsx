@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 
 export interface CartItem {
   id: string; // Composite unique key: `${productId}-${size}-${color || 'default'}`
@@ -63,8 +63,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, [items, isInitialized]);
 
-  const openCart = () => setIsOpen(true);
-  const closeCart = () => setIsOpen(false);
+  const openCart = useCallback(() => setIsOpen(true), []);
+  const closeCart = useCallback(() => setIsOpen(false), []);
 
   const addItem = (item: Omit<CartItem, "id">) => {
     const compositeId = `${item.productId}-${item.size}-${item.color || "std"}`;

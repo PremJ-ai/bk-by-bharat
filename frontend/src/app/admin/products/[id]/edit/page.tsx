@@ -1,21 +1,23 @@
 "use client";
 
-import { useState, useEffect, use, useRef } from "react";
+import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ProductCard } from "@/components/product/ProductCard";
 import type { ProductViewModel } from "@/components/product/product.types";
+import { ProductMediaManager } from "@/components/admin/ProductMediaManager";
+import {
+  emptyFabricSpecificationForm,
+  FabricSpecificationFields,
+  toFabricSpecifications,
+} from "@/components/admin/FabricSpecificationFields";
 import {
   getAdminProductById,
   updateAdminProduct,
-  publishAdminProduct,
-  unpublishAdminProduct,
 } from "@/lib/api/catalog";
-import { createProductMediaUploadUrl, generateAiMedia, uploadMediaAsset } from "@/lib/api/media";
+import type { AdminProductMediaItem } from "@/lib/api/media";
 import {
   ArrowLeft,
-  Sparkles,
-  Upload,
   CheckCircle2,
   AlertCircle,
   Eye,
@@ -33,12 +35,9 @@ export default function EditProductPage({ params }: EditProductPageProps) {
   const resolvedParams = use(params);
   const productId = resolvedParams.id;
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Product Form State
@@ -46,11 +45,15 @@ export default function EditProductPage({ params }: EditProductPageProps) {
   const [slug, setSlug] = useState("");
   const [category, setCategory] = useState("Shirts");
   const [material, setMaterial] = useState("");
-  const [priceRupees, setPriceRupees] = useState("0");
+  const [fabricSpecifications, setFabricSpecifications] = useState(emptyFabricSpecificationForm);
+  const [priceRupees, setPriceRupees] = useState("");
   const [description, setDescription] = useState("");
-  const [badge, setBadge] = useState<"New" | "Limited" | "Atelier Pick" | undefined>(undefined);
+  const [longDescription, setLongDescription] = useState("");
+  const [detailsText, setDetailsText] = useState("");
+  const [careInstructionsText, setCareInstructionsText] = useState("");
+  const [badge, setBadge] = useState<"New" | "Limited" | "Atelier Pick" | "Core" | undefined>(undefined);
   const [status, setStatus] = useState<"DRAFT" | "PUBLISHED" | "ARCHIVED">("DRAFT");
-  const [imageUrl, setImageUrl] = useState<string>("");
+  const [mediaItems, setMediaItems] = useState<AdminProductMediaItem[]>([]);
   const [variants, setVariants] = useState<any[]>([]);
 
   useEffect(() => {
@@ -63,11 +66,32 @@ export default function EditProductPage({ params }: EditProductPageProps) {
           setSlug(prod.slug || "");
           setCategory(prod.category || "Shirts");
           setMaterial(prod.material || "");
+          setFabricSpecifications({
+            ...emptyFabricSpecificationForm(),
+            fabricName: prod.fabricSpecifications?.fabricName || "",
+            composition: prod.fabricSpecifications?.composition || "",
+            fibrePercentages: (prod.fabricSpecifications?.fibrePercentages || []).map((item) => ({
+              fibre: item.fibre,
+              percentage: String(item.percentage),
+            })),
+            weightGsm: prod.fabricSpecifications?.weightGsm ? String(prod.fabricSpecifications.weightGsm) : "",
+            weave: prod.fabricSpecifications?.weave || "",
+            texture: prod.fabricSpecifications?.texture || "",
+            stretch: prod.fabricSpecifications?.stretch || "",
+            origin: prod.fabricSpecifications?.origin || "",
+            finish: prod.fabricSpecifications?.finish || "",
+            fit: prod.fabricSpecifications?.fit || "",
+            pattern: prod.fabricSpecifications?.pattern || "",
+            colour: prod.fabricSpecifications?.colour || "",
+          });
           setPriceRupees(String(Math.round((prod.pricePaise || 0) / 100)));
           setDescription(prod.description || "");
+          setLongDescription(typeof prod.longDescription === "string" ? prod.longDescription : "");
+          setDetailsText((prod.details || []).join("\n"));
+          setCareInstructionsText((prod.careInstructions || []).join("\n"));
           setBadge(prod.badge || undefined);
           setStatus(prod.status || "DRAFT");
-          setImageUrl(prod.media?.[0]?.url || "");
+          setMediaItems((prod.media || []).map((item, index) => ({ ...item, sortOrder: index })));
           setVariants(prod.variants || []);
           setLoading(false);
         }
@@ -88,6 +112,7 @@ export default function EditProductPage({ params }: EditProductPageProps) {
   }, [productId]);
 
   const pricePaise = (parseInt(priceRupees, 10) || 0) * 100;
+  const primaryImage = mediaItems.find((item) => item.mediaType === "IMAGE" && item.isPrimary);
 
   const liveProduct: ProductViewModel = {
     id: productId,
@@ -99,86 +124,8 @@ export default function EditProductPage({ params }: EditProductPageProps) {
     currency: "INR",
     stockStatus: variants.some((v) => v.stock > 0) ? "in_stock" : "out_of_stock",
     badge,
-    imageUrl: imageUrl || undefined,
+    imageUrl: primaryImage?.url,
     isFixture: false,
-  };
-
-  const handleGenerateAI = async () => {
-    try {
-      setIsGenerating(true);
-      setFeedback(null);
-      const asset = await generateAiMedia({
-        productName: name || "Garment",
-        material: material || "Fabric",
-        categoryName: category,
-        productId,
-      });
-      setImageUrl(asset.url);
-      setFeedback({ type: "success", message: "AI Lookbook asset generated and staged!" });
-    } catch (err: any) {
-      setFeedback({ type: "error", message: err?.message || "Generation failed." });
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setIsUploading(true);
-      setFeedback(null);
-
-      const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/avif"];
-      if (!allowedTypes.includes(file.type)) {
-        throw new Error("Choose a JPEG, PNG, WebP, or AVIF product image.");
-      }
-      if (file.size < 1 || file.size > 10 * 1024 * 1024) {
-        throw new Error("Product images must be between 1 byte and 10MB.");
-      }
-
-      const uploadTicket = await createProductMediaUploadUrl({
-        mimeType: file.type as "image/jpeg" | "image/png" | "image/webp" | "image/avif",
-        fileSizeBytes: file.size,
-      });
-
-      const publicKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      if (!publicKey) {
-        throw new Error("Product image storage is not configured. Contact the site administrator.");
-      }
-
-      const uploadForm = new FormData();
-      uploadForm.append("cacheControl", "3600");
-      uploadForm.append("", file);
-      const uploadResponse = await fetch(uploadTicket.signedUploadUrl, {
-        method: "PUT",
-        headers: {
-          apikey: publicKey,
-          Authorization: "Bearer " + publicKey,
-          "x-upsert": "false",
-        },
-        body: uploadForm,
-      });
-      if (!uploadResponse.ok) {
-        throw new Error("Supabase could not store this product image. Please try again.");
-      }
-
-      const asset = await uploadMediaAsset({
-        fileName: file.name,
-        mimeType: file.type as "image/jpeg" | "image/png" | "image/webp" | "image/avif",
-        storageKey: uploadTicket.storageKey,
-        fileSizeBytes: file.size,
-        altText: name + " - " + file.name,
-      });
-      setImageUrl(asset.url);
-      setFeedback({ type: "success", message: "Media asset uploaded successfully!" });
-    } catch (err: any) {
-      setFeedback({ type: "error", message: err?.message || "Upload failed." });
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
   };
 
   const handleSave = async (publish?: boolean) => {
@@ -192,7 +139,9 @@ export default function EditProductPage({ params }: EditProductPageProps) {
         name,
         slug,
         description,
+        longDescription: longDescription.trim() || undefined,
         material,
+        fabricSpecifications: toFabricSpecifications(fabricSpecifications),
         categoryName: category,
         pricePaise,
         badge: badge || undefined,
@@ -203,16 +152,9 @@ export default function EditProductPage({ params }: EditProductPageProps) {
           colorName: v.colorName || "Standard",
           stock: Number(v.stock) || 0,
         })),
-        media: imageUrl
-          ? [
-              {
-                url: imageUrl,
-                altText: `${name} in ${material}`,
-                isPrimary: true,
-                sortOrder: 0,
-              },
-            ]
-          : [],
+        details: detailsText.split("\n").map((item) => item.trim()).filter(Boolean),
+        careInstructions: careInstructionsText.split("\n").map((item) => item.trim()).filter(Boolean),
+        media: mediaItems,
       };
 
       const res = await updateAdminProduct(productId, payload);
@@ -367,13 +309,21 @@ export default function EditProductPage({ params }: EditProductPageProps) {
                 </label>
                 <select
                   value={badge || ""}
-                  onChange={(e) => setBadge((e.target.value as any) || undefined)}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setBadge(
+                      value === "New" || value === "Limited" || value === "Atelier Pick" || value === "Core"
+                        ? value
+                        : undefined
+                    );
+                  }}
                   className="w-full bg-canvas border border-border p-2.5 text-xs text-ink focus:border-gold focus:outline-none"
                 >
                   <option value="">None</option>
                   <option value="New">New</option>
                   <option value="Limited">Limited</option>
                   <option value="Atelier Pick">Atelier Pick</option>
+                  <option value="Core">Core</option>
                 </select>
               </div>
             </div>
@@ -408,6 +358,11 @@ export default function EditProductPage({ params }: EditProductPageProps) {
               />
             </div>
 
+            <FabricSpecificationFields
+              value={fabricSpecifications}
+              onChange={setFabricSpecifications}
+            />
+
             <div className="space-y-1">
               <label className="text-xs uppercase tracking-caps text-muted font-medium block">
                 Price (INR) *
@@ -429,61 +384,53 @@ export default function EditProductPage({ params }: EditProductPageProps) {
               </label>
               <textarea
                 rows={3}
+                maxLength={1000}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="w-full bg-canvas border border-border p-2.5 text-xs text-ink focus:border-gold focus:outline-none leading-relaxed"
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1">
               <label className="text-xs uppercase tracking-caps text-muted font-medium block">
-                Primary Image URL
+                Long Description
               </label>
-              <input
-                type="text"
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                className="w-full bg-canvas border border-border p-2.5 text-xs text-ink font-mono focus:border-gold focus:outline-none"
+              <textarea
+                rows={4}
+                maxLength={4000}
+                value={longDescription}
+                onChange={(event) => setLongDescription(event.target.value)}
+                className="w-full bg-canvas border border-border p-2.5 text-xs text-ink focus:border-gold focus:outline-none leading-relaxed"
               />
-
-              <div className="flex flex-wrap gap-2 pt-1">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/avif"
-                  className="hidden"
-                  onChange={handleFileUpload}
-                />
-
-                <button
-                  type="button"
-                  onClick={handleGenerateAI}
-                  disabled={isGenerating}
-                  className="bg-navy text-canvas hover:bg-gold hover:text-navy px-3 py-1.5 text-xs uppercase tracking-caps font-semibold flex items-center space-x-1.5 transition-colors disabled:opacity-50"
-                >
-                  {isGenerating ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Sparkles className="w-3.5 h-3.5" />
-                  )}
-                  <span>{isGenerating ? "Synthesizing..." : "Generate AI Visual"}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="border border-border hover:border-gold px-3 py-1.5 text-xs uppercase tracking-caps font-medium text-ink flex items-center space-x-1.5 transition-colors disabled:opacity-50"
-                >
-                  {isUploading ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Upload className="w-3.5 h-3.5 text-muted" />
-                  )}
-                  <span>{isUploading ? "Uploading..." : "Upload File"}</span>
-                </button>
-              </div>
             </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="space-y-1 text-xs uppercase tracking-caps text-muted">
+                Garment details (one per line)
+                <textarea
+                  rows={4}
+                  value={detailsText}
+                  onChange={(event) => setDetailsText(event.target.value)}
+                  className="w-full bg-canvas border border-border p-2.5 text-xs normal-case tracking-normal text-ink focus:border-gold focus:outline-none"
+                />
+              </label>
+              <label className="space-y-1 text-xs uppercase tracking-caps text-muted">
+                Care instructions (one per line)
+                <textarea
+                  rows={4}
+                  value={careInstructionsText}
+                  onChange={(event) => setCareInstructionsText(event.target.value)}
+                  className="w-full bg-canvas border border-border p-2.5 text-xs normal-case tracking-normal text-ink focus:border-gold focus:outline-none"
+                />
+              </label>
+            </div>
+
+            <ProductMediaManager
+              items={mediaItems}
+              onChange={setMediaItems}
+              productName={name}
+              material={material}
+            />
 
             {/* Inventory table */}
             <div className="space-y-2 pt-2 border-t border-border">

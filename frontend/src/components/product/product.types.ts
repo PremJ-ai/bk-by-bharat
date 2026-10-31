@@ -9,6 +9,6 @@ export interface ProductViewModel {
   imageUrl?: string;
   imageAlt?: string;
   stockStatus: "in_stock" | "low_stock" | "out_of_stock";
-  badge?: "New" | "Limited" | "Atelier Pick";
+  badge?: "New" | "Limited" | "Atelier Pick" | "Core";
   isFixture?: boolean;
 }

@@ -10,6 +10,7 @@ import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { submitGuestCheckout } from "@/lib/api/commerce";
 import { getStorefrontProductBySlug } from "@/lib/api/catalog";
+import { ApiError } from "@/lib/api/client";
 import {
   ShieldCheck,
   ShoppingBag,
@@ -99,8 +100,14 @@ export default function GuestCheckoutPage() {
 
       // Redirect to private confirmation screen with real guest token
       router.push(`/orders/confirmation/${res.guestStatusToken}`);
-    } catch {
-      setErrorMessage("An unexpected error occurred while placing your order. Please try again.");
+    } catch (error: unknown) {
+      setErrorMessage(
+        error instanceof ApiError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : "Your order could not be placed. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -129,13 +136,13 @@ export default function GuestCheckoutPage() {
 
         <div className="pb-8 border-b border-border mb-10">
           <span className="text-xs uppercase tracking-caps text-gold font-medium block mb-2">
-            Direct Atelier Concierge &middot; Step 1 of 2
+            Guest order &middot; Step 1 of 2
           </span>
           <h1 className="font-display text-4xl sm:text-5xl text-ink font-normal">
             Guest Checkout &amp; Delivery
           </h1>
           <p className="text-muted text-sm leading-relaxed font-sans max-w-xl pt-1">
-            No password or account registration required. Your garments are reserved and billed via personalized WhatsApp QR verification.
+            No account is required. Orders follow the existing invoice and manual payment-verification workflow. Automated WhatsApp Cloud API messaging is not enabled in this phase.
           </p>
         </div>
 
@@ -174,7 +181,7 @@ export default function GuestCheckoutPage() {
                     1. Recipient &amp; WhatsApp Details
                   </h2>
                   <p className="text-xs text-muted font-sans mt-0.5">
-                    Your final bill, payment QR, and dispatch updates will be sent directly to this number.
+                    This number is collected for order-related contact. Automated WhatsApp Cloud API notifications are not enabled in this phase.
                   </p>
                 </div>
 
@@ -244,7 +251,7 @@ export default function GuestCheckoutPage() {
                     2. Shipping Destination
                   </h2>
                   <p className="text-xs text-muted font-sans mt-0.5">
-                    Insured nationwide courier delivery to your residential or office address.
+                    Enter the address where you would like the order delivered.
                   </p>
                 </div>
 
@@ -345,14 +352,14 @@ export default function GuestCheckoutPage() {
                       htmlFor="deliveryNotes"
                       className="block text-xs uppercase tracking-caps text-ink font-medium mb-1.5"
                     >
-                      Bespoke Tailoring or Delivery Instructions (Optional)
+                      Order or Delivery Instructions (Optional)
                     </label>
                     <textarea
                       id="deliveryNotes"
                       rows={2}
                       value={deliveryNotes}
                       onChange={(e) => setDeliveryNotes(e.target.value)}
-                      placeholder="e.g. Please hem trousers to 30-inch inseam. Ring bell on arrival."
+                      placeholder="e.g. Delivery directions or order notes."
                       className="w-full bg-canvas border border-border px-3.5 py-2.5 text-sm text-ink focus:border-gold focus:outline-none"
                     />
                   </div>
@@ -374,9 +381,9 @@ export default function GuestCheckoutPage() {
                   </div>
                   <label htmlFor="whatsappConsent" className="text-xs text-ink leading-relaxed cursor-pointer select-none">
                     <span className="font-medium text-navy block mb-0.5">
-                      Explicit Consent for Transactional WhatsApp Communication *
+                      Consent to Order-Related Phone Contact *
                     </span>
-                    I hereby consent to receiving my order confirmation, itemized final invoice, configured studio payment QR, and courier dispatch updates directly on my provided WhatsApp number. I understand this store operates under a guest checkout workflow and does not create an online user account.
+                    I consent to the atelier using this number for order-related contact. Automated WhatsApp Cloud API messages are not enabled in this phase, so this consent does not guarantee automated notifications. Guest checkout does not create an online customer account.
                   </label>
                 </div>
               </div>
@@ -439,7 +446,7 @@ export default function GuestCheckoutPage() {
                 </div>
                 <div className="flex justify-between text-muted">
                   <span>Shipping &amp; Transit</span>
-                  <span className="text-stock-ok font-medium">Complimentary</span>
+                  <span className="text-muted font-medium">Shown on invoice</span>
                 </div>
                 <div className="flex justify-between text-base font-semibold text-ink pt-2 border-t border-border">
                   <span>Payable Total</span>
@@ -457,7 +464,7 @@ export default function GuestCheckoutPage() {
                   1. Our studio verifies current inventory and validates your address.
                 </p>
                 <p className="text-[11px]">
-                  2. We message your WhatsApp with the final bill and studio payment QR.
+                  2. Review the invoice and payment instructions on your order confirmation page.
                 </p>
                 <p className="text-[11px]">
                   3. After you send the payment receipt, staff verifies the transfer and prepares your garments.

@@ -2,73 +2,60 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { EditorialCropReveal } from "@/components/motion/EditorialCropReveal";
 import { SectionReveal } from "@/components/motion/SectionReveal";
+import { StaggeredGrid } from "@/components/motion/StaggeredGrid";
+
+const garmentNotes = [
+  {
+    number: "01",
+    title: "Material",
+    description: "Fabric and composition details are shown when they have been recorded for a garment.",
+  },
+  {
+    number: "02",
+    title: "Construction",
+    description: "Explore the saved garment details alongside the product gallery and description.",
+  },
+  {
+    number: "03",
+    title: "Care",
+    description: "Follow the care instructions provided for each individual piece.",
+  },
+];
 
 export function EditorialSplit() {
   return (
-    <SectionReveal className="max-w-[1440px] mx-auto px-6 md:px-12 py-20 border-b border-border">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-        {/* Left Visual Editorial Frame */}
+    <SectionReveal className="mx-auto max-w-[1440px] border-b border-border px-6 py-20 md:px-12">
+      <div className="grid grid-cols-1 items-center gap-12 lg:grid-cols-12">
         <div className="lg:col-span-7">
           <EditorialCropReveal>
-            <div className="bg-surface-muted border border-border p-8 md:p-14 relative min-h-[460px] flex flex-col justify-between">
+            <div className="relative flex min-h-[420px] flex-col justify-between border border-border bg-[#eee8de] p-8 md:p-14">
               <div className="space-y-3">
-                <span className="text-[11px] uppercase tracking-caps text-gold font-medium block">
-                  The Philosophy
-                </span>
-                <h2 className="font-display text-3xl md:text-5xl text-ink font-normal leading-tight">
-                  Honest Weight &amp; Architectural Silhouette
+                <span className="mb-2 block text-[11px] font-medium uppercase tracking-caps text-gold">The atelier</span>
+                <h2 className="font-display text-3xl font-normal leading-tight text-ink md:text-5xl">
+                  Considered pieces, clearly described.
                 </h2>
               </div>
-
-              <div className="space-y-4 max-w-lg mt-8">
-                <p className="text-muted text-sm md:text-base leading-relaxed">
-                  Every pattern begins on drafting paper with calculated balance points. We design clothing to
-                  sit cleanly against the collarbone, drape without friction over the hips, and preserve ease of movement.
+              <div className="mt-8 max-w-lg space-y-4">
+                <p className="text-sm leading-relaxed text-muted md:text-base">
+                  Discover the collection through its imagery, product details, material notes, and care guidance.
+                  Each product page reflects the information saved for that garment.
                 </p>
-                <Link
-                  href="/craft"
-                  className="inline-flex items-center space-x-2 text-navy text-xs uppercase tracking-caps font-semibold hover:text-gold transition-colors"
-                >
-                  <span>Read the Craft Dossier</span>
-                  <ArrowRight className="w-4 h-4" />
+                <Link href="/collections/all" className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-caps text-navy transition-colors hover:text-gold">
+                  Explore the collection <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
             </div>
           </EditorialCropReveal>
         </div>
-
-        {/* Right Craft Modules */}
-        <div className="lg:col-span-5 space-y-6">
-          <div className="bg-surface p-8 border border-border">
-            <span className="text-[10px] uppercase tracking-caps text-muted block mb-2">
-              01 &middot; Provenance
-            </span>
-            <h3 className="font-display text-xl text-ink mb-2">Heritage Mills Only</h3>
-            <p className="text-muted text-sm leading-relaxed">
-              Sourced directly from certified flax weavers in Western Flanders and spinning mills in Piedmont.
-            </p>
-          </div>
-
-          <div className="bg-surface p-8 border border-border">
-            <span className="text-[10px] uppercase tracking-caps text-muted block mb-2">
-              02 &middot; Precision
-            </span>
-            <h3 className="font-display text-xl text-ink mb-2">22 Stitches Per Inch</h3>
-            <p className="text-muted text-sm leading-relaxed">
-              Ultra-fine single needle lockstitching prevents puckering and withstands decades of laundering.
-            </p>
-          </div>
-
-          <div className="bg-surface p-8 border border-border">
-            <span className="text-[10px] uppercase tracking-caps text-muted block mb-2">
-              03 &middot; Longevity
-            </span>
-            <h3 className="font-display text-xl text-ink mb-2">Lifetime Seam Warranty</h3>
-            <p className="text-muted text-sm leading-relaxed">
-              Should any Bharat garment develop seam strain under natural wear, our atelier repairs it at zero cost.
-            </p>
-          </div>
-        </div>
+        <StaggeredGrid className="space-y-4 lg:col-span-5">
+          {garmentNotes.map((note) => (
+            <div key={note.number} data-grid-item className="border border-border bg-surface p-6 md:p-8">
+              <span className="mb-2 block text-[10px] uppercase tracking-caps text-muted">{note.number} · Product notes</span>
+              <h3 className="mb-2 font-display text-xl text-ink">{note.title}</h3>
+              <p className="text-sm leading-relaxed text-muted">{note.description}</p>
+            </div>
+          ))}
+        </StaggeredGrid>
       </div>
     </SectionReveal>
   );

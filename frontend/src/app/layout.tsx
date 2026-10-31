@@ -4,7 +4,7 @@ import { CartDrawer } from "@/components/cart/CartDrawer";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "BHARAT | Curated Menswear & Tailoring",
+  title: "BK BY BHARAT | Curated Menswear & Tailoring",
   description: "Editorial menswear craft, structured silhouettes, and uncompromised textiles.",
 };
 
