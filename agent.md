@@ -7,9 +7,9 @@ This file defines how an autonomous coding agent should plan, implement, observe
 - Storefront/admin work is implemented on `feat/bharat-atelier-storefront-redesign`; it is not merged into `main`.
 - Backend and frontend typechecks/builds pass, and the backend suite passes 58/58 tests against the dedicated local `fashion_commerce_test` database.
 - The additive media/fabric migration has been applied only to that local test database. Do not apply it to production.
-- No preview deployment, deployed health check, full visual/accessibility review, or admin upload against staging storage has been verified. A limited local browser smoke confirmed live homepage/catalog data and product size selection.
+- Vercel Git integration reports that the feature-branch storefront deployment completed and the backend deployment failed. The Preview is Vercel-authentication protected; deployed storefront behavior, health checks, and remote Preview migration are unverified, and backend logs require authenticated access. A limited local browser smoke confirmed live homepage/catalog data and product size selection.
 - Cart interaction and order submission were not browser-verified; do not treat the smoke check as checkout acceptance.
-- The project owner confirmed that Vercel Git integration creates branch Preview deployments and that Preview uses a dedicated non-production database. The Preview migration guard was locally exercised against `fashion_commerce_test`; remote Preview migration, deployment, and health checks remain unverified. Never apply this migration to production as part of this phase.
+- The project owner confirmed that Vercel Git integration creates branch Preview deployments and that Preview uses a dedicated non-production database. The Preview migration guard was locally exercised against `fashion_commerce_test`; remote Preview migration and health checks remain unverified. The backend deployment failure cannot be diagnosed until its Vercel build logs are available. Never apply this migration to production as part of this phase.
 - Live AI generation, Meta WhatsApp Cloud API, and Razorpay are outside Phase 1; do not present local/test providers as operational integrations.
 
 ## 1. Operating principles

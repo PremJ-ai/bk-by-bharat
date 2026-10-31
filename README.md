@@ -37,8 +37,11 @@ dedicated non-production database; the additive migration has not yet been verif
 remote Preview database.
 
 Phase 1 changes are on `feat/bharat-atelier-storefront-redesign`; no production change has been
-performed. Preview deployment and deployed health checks are not yet verified. AI image generation,
-the official WhatsApp Cloud API, and Razorpay are not presented as Phase 1 integrations.
+performed. Vercel Git integration reports that the branch storefront deployment completed and the
+backend deployment failed. The Preview is protected by Vercel authentication, so the storefront,
+backend health checks, and remote Preview database migration have not been independently verified;
+the backend build logs still need inspection. AI image generation, the official WhatsApp Cloud API,
+and Razorpay are not presented as Phase 1 integrations.
 
 ---
 
@@ -328,7 +331,7 @@ build, frontend typecheck/production build, and all 58 backend tests passed. Bac
 tests used the dedicated loopback `fashion_commerce_test` database. The additive migration is
 present in that test database only. A limited local browser smoke confirmed live homepage/catalog
 data and product size selection; full visual/accessibility QA, cart/order submission, admin upload
-against configured staging storage, and staging deployment have not been verified.
+against configured staging storage, and deployed Preview behavior have not been verified.
 
 **Final local verification:** Prisma Client generation, backend typecheck/build/Vercel build,
 frontend typecheck/production build, and all 58 backend tests passed. The additive migration was
@@ -337,7 +340,9 @@ guard was exercised locally with `VERCEL_ENV=preview` against that same test dat
 no pending migrations; this does not verify a remote Preview deployment or database. A limited
 local browser smoke confirmed live homepage/catalog data and product size selection. Full
 visual/accessibility QA, cart/order submission, admin upload against staging storage, and remote
-Preview deployment remain unverified.
+Preview app behavior, deployed health checks, and remote Preview migration remain unverified. The
+Git integration status for the current branch reports storefront deployment success and backend
+deployment failure; Vercel build logs require authenticated access.
 
 ### 2. Typechecking Across Workspaces
 ```bash
@@ -436,8 +441,10 @@ request/response bodies are limited to **4.5 MB**, and the current Express JSON 
 1 MB; the existing 10 MB base64 upload path is not a suitable production upload path. Prefer
 authenticated direct-to-object-storage uploads with size/content validation.
 
-The backend entry-point configuration is explicit, but the updated Vercel configuration and build
-have not yet been confirmed by an actual Vercel deployment. No live preview has been performed.
+The backend entry-point configuration is explicit. The feature-branch Vercel status reports a
+failed backend deployment; its build logs require authenticated Vercel access. The storefront
+deployment status completed, but Vercel authentication protection prevented browser verification.
+No deployed health check has been performed.
 
 References: [Express on Vercel](https://vercel.com/docs/frameworks/backend/express),
 [Vercel Function limits](https://vercel.com/docs/functions/limitations), and
