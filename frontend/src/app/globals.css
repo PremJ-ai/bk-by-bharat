@@ -5,20 +5,20 @@
 :root {
   --font-garamond: "EB Garamond", Georgia, "Times New Roman", serif;
   --font-hanken: "Hanken Grotesk", "Segoe UI", Arial, sans-serif;
-  --color-canvas: #FBF9F5;
-  --color-surface: #FFFFFF;
-  --color-surface-muted: #F1EEE8;
-  --color-ink: #202428;
-  --color-navy: #0A192F;
-  --color-navy-strong: #061120;
-  --color-gold: #C29B38;
+  --color-canvas: #FBF7F0;
+  --color-surface: #FFFCF6;
+  --color-surface-muted: #F1E9DD;
+  --color-ink: #30271F;
+  --color-navy: #493426;
+  --color-navy-strong: #2C1F18;
+  --color-gold: #9B7448;
   --color-rust: #8C3A27;
-  --color-muted: #4A525D;
-  --color-border: #E5E2DC;
+  --color-muted: #70665B;
+  --color-border: #E1D6C8;
   --color-stock-low: #BA1A1A;
   --color-stock-ok: #1B5E20;
   --color-focus: #2458A6;
-  --color-overlay: rgba(6, 17, 32, 0.58);
+  --color-overlay: rgba(44, 31, 24, 0.58);
 }
 
 @layer base {
@@ -58,13 +58,30 @@
 }
 
 .animate-ticker:hover,
-.animate-ticker:focus-within {
+.animate-ticker:focus-within,
+.marquee-container:focus-within .animate-ticker {
   animation-play-state: paused;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
   .animate-ticker {
     animation: none;
+  }
+
+  .marquee-container {
     overflow-x: auto;
+  }
+
+  .marquee-container .animate-ticker {
+    width: max-content;
   }
 }

@@ -1,17 +1,19 @@
 "use client";
 
-import { useState, useMemo, use, useEffect } from "react";
+import { useState, use, useEffect } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AnnouncementBar } from "@/components/layout/AnnouncementBar";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { ProductCard } from "@/components/product/ProductCard";
 import type { ProductViewModel } from "@/components/product/product.types";
-import { MOCK_PRODUCTS } from "@/components/product/mockFixtures";
 import { getStorefrontProducts } from "@/lib/api/catalog";
-import { SlidersHorizontal, ChevronRight, X, RotateCcw, Loader2 } from "lucide-react";
+import { SlidersHorizontal, ChevronRight, X, RotateCcw } from "lucide-react";
 import { SectionReveal } from "@/components/motion/SectionReveal";
 import { StaggeredGrid } from "@/components/motion/StaggeredGrid";
+
+const COLLECTION_PAGE_SIZE = 20;
 
 interface CollectionPageProps {
   params: Promise<{ slug: string }>;
@@ -19,11 +21,15 @@ interface CollectionPageProps {
 
 export default function CollectionPage({ params }: CollectionPageProps) {
   const resolvedParams = use(params);
+  const searchParams = useSearchParams();
   const categorySlug = resolvedParams.slug.toLowerCase();
+  const searchQuery = searchParams.get("search")?.trim() || "";
 
   // Active filter state
   const [selectedCategory, setSelectedCategory] = useState<string>(categorySlug);
-  const [sortBy, setSortBy] = useState<string>("featured");
+  const [sortBy, setSortBy] = useState<string>("newest");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [selectedMaterial, setSelectedMaterial] = useState<string>("all");
   const [selectedSize, setSelectedSize] = useState<string>("all");
   const [inStockOnly, setInStockOnly] = useState<boolean>(false);
@@ -32,13 +38,23 @@ export default function CollectionPage({ params }: CollectionPageProps) {
   // Products from backend
   const [products, setProducts] = useState<ProductViewModel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
 
-  // Sync category if URL slug changes
   const activeCategory = selectedCategory || categorySlug;
+  const totalPages = Math.ceil(total / COLLECTION_PAGE_SIZE);
+
+  useEffect(() => {
+    setSelectedCategory(categorySlug);
+  }, [categorySlug]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [activeCategory, selectedMaterial, selectedSize, inStockOnly, sortBy, searchQuery]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setCatalogError(null);
 
     getStorefrontProducts({
       category: activeCategory,
@@ -46,17 +62,23 @@ export default function CollectionPage({ params }: CollectionPageProps) {
       size: selectedSize !== "all" ? selectedSize : undefined,
       inStock: inStockOnly,
       sortBy,
+      search: searchQuery || undefined,
+      page,
+      limit: COLLECTION_PAGE_SIZE,
     })
       .then((res) => {
         if (!cancelled) {
           setProducts(res.items);
+          setTotal(res.total);
           setLoading(false);
         }
       })
       .catch((err) => {
         if (!cancelled) {
-          console.warn("Falling back to catalog fixtures:", err?.message);
-          setProducts(MOCK_PRODUCTS);
+          console.error("Unable to load collection from the catalog API:", err);
+          setProducts([]);
+          setTotal(0);
+          setCatalogError("The catalog is temporarily unavailable. Please try again shortly.");
           setLoading(false);
         }
       });
@@ -64,7 +86,7 @@ export default function CollectionPage({ params }: CollectionPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [activeCategory, selectedMaterial, selectedSize, inStockOnly, sortBy]);
+  }, [activeCategory, selectedMaterial, selectedSize, inStockOnly, sortBy, searchQuery, page]);
 
   const filteredProducts = products;
 
@@ -74,7 +96,7 @@ export default function CollectionPage({ params }: CollectionPageProps) {
     setSelectedMaterial("all");
     setSelectedSize("all");
     setInStockOnly(false);
-    setSortBy("featured");
+    setSortBy("newest");
   };
 
   const getCategoryTitle = () => {
@@ -82,19 +104,6 @@ export default function CollectionPage({ params }: CollectionPageProps) {
     if (activeCategory === "trousers") return "Structured Trousers";
     if (activeCategory === "tailoring") return "Atelier Tailoring";
     return "Complete Atelier Collection";
-  };
-
-  const getCategoryDescription = () => {
-    if (activeCategory === "shirts") {
-      return "Hand-cut camp collars and band-collar tunics constructed from Belgian linen and Giza 87 Egyptian cotton.";
-    }
-    if (activeCategory === "trousers") {
-      return "High-rise Gurkha trousers and single-pleat chinos cut with generous rise, deep reverse pleats, and uncompromised drape.";
-    }
-    if (activeCategory === "tailoring") {
-      return "Unstructured jackets and heirloom outerwear crafted with soft shoulders, Milanese lapel buttonholes, and zero synthetic padding.";
-    }
-    return "The complete catalog of editorial menswear essentials crafted in limited runs with artisan precision.";
   };
 
   return (
@@ -130,14 +139,26 @@ export default function CollectionPage({ params }: CollectionPageProps) {
         <SectionReveal className="pb-10 border-b border-border">
           <div className="max-w-2xl space-y-3">
             <span className="text-xs uppercase tracking-caps text-gold font-medium block">
-              Curated Silhouette &middot; Autumn / Winter 2026
+              Bharat Atelier collection
             </span>
             <h1 className="font-display text-4xl sm:text-5xl md:text-6xl text-ink font-normal leading-[1.08]">
               {getCategoryTitle()}
             </h1>
             <p className="text-muted text-sm sm:text-base leading-relaxed font-sans pt-1">
-              {getCategoryDescription()}
+              Browse available {getCategoryTitle().toLowerCase()} and filter by material, size, and stock.
             </p>
+            {searchQuery && (
+              <p className="text-sm text-muted" role="status">
+                Search results for <span className="font-medium text-ink">“{searchQuery}”</span>
+                {" · "}
+                <Link
+                  href={`/collections/${activeCategory}`}
+                  className="text-navy underline underline-offset-4 hover:text-gold"
+                >
+                  Clear search
+                </Link>
+              </p>
+            )}
           </div>
 
           {/* Category Navigation Tabs */}
@@ -169,7 +190,14 @@ export default function CollectionPage({ params }: CollectionPageProps) {
           {/* Result Count & Active Filter Indicator */}
           <div className="flex items-center space-x-3 text-xs text-muted font-sans">
             <span className="font-medium text-ink">
-              Showing {filteredProducts.length} {filteredProducts.length === 1 ? "design" : "designs"}
+            {loading
+              ? "Loading designs…"
+              : total === 0
+              ? "Showing 0 designs"
+              : `Showing ${(page - 1) * COLLECTION_PAGE_SIZE + 1}–${Math.min(
+                  page * COLLECTION_PAGE_SIZE,
+                  total
+                )} of ${total} designs`}
             </span>
             {hasActiveFilters && (
               <button
@@ -247,7 +275,7 @@ export default function CollectionPage({ params }: CollectionPageProps) {
                 onChange={(e) => setSortBy(e.target.value)}
                 className="bg-surface border border-border px-3 py-1.5 text-xs text-ink focus:outline-none focus:border-gold rounded-none font-medium"
               >
-                <option value="featured">Featured Sequence</option>
+                <option value="newest">Newest First</option>
                 <option value="price-asc">Price: Low to High</option>
                 <option value="price-desc">Price: High to Low</option>
                 <option value="name-asc">Design Name (A-Z)</option>
@@ -258,7 +286,16 @@ export default function CollectionPage({ params }: CollectionPageProps) {
 
         {/* 4. Product Grid or Empty State */}
         <section className="py-12">
-          {filteredProducts.length === 0 ? (
+          {catalogError ? (
+            <div className="py-24 text-center space-y-4 max-w-md mx-auto" role="alert">
+              <h3 className="font-display text-2xl text-ink font-normal">Catalog unavailable</h3>
+              <p className="text-muted text-xs leading-relaxed font-sans">{catalogError}</p>
+            </div>
+          ) : loading ? (
+            <div className="py-24 text-center text-sm text-muted" role="status">
+              Loading the collection…
+            </div>
+          ) : filteredProducts.length === 0 ? (
             <div className="py-24 text-center space-y-4 max-w-md mx-auto">
               <h3 className="font-display text-2xl text-ink font-normal">
                 No matching garments found
@@ -277,7 +314,7 @@ export default function CollectionPage({ params }: CollectionPageProps) {
               </div>
             </div>
           ) : (
-            <StaggeredGrid className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <StaggeredGrid productGrid className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {filteredProducts.map((product, idx) => (
                 <ProductCard
                   key={product.id}
@@ -286,6 +323,30 @@ export default function CollectionPage({ params }: CollectionPageProps) {
                 />
               ))}
             </StaggeredGrid>
+          )}
+
+          {!catalogError && !loading && totalPages > 1 && (
+            <nav aria-label="Collection pages" className="mt-10 flex items-center justify-center gap-4">
+              <button
+                type="button"
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                disabled={page === 1 || loading}
+                className="border border-border px-4 py-2 text-xs uppercase tracking-caps text-ink transition-colors hover:border-gold disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <span className="text-xs text-muted" aria-live="polite">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                disabled={page === totalPages || loading}
+                className="border border-border px-4 py-2 text-xs uppercase tracking-caps text-ink transition-colors hover:border-gold disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+              </button>
+            </nav>
           )}
         </section>
       </main>

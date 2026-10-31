@@ -1,15 +1,40 @@
 import { apiClient } from "./client";
 import type { ProductViewModel } from "@/components/product/product.types";
+import type { AdminProductMediaItem } from "./media";
+
+export interface FabricSpecifications {
+  fabricName?: string | null;
+  composition?: string | null;
+  fibrePercentages?: { fibre: string; percentage: number }[];
+  weightGsm?: number | null;
+  weave?: string | null;
+  texture?: string | null;
+  stretch?: string | null;
+  origin?: string | null;
+  finish?: string | null;
+  fit?: string | null;
+  pattern?: string | null;
+  colour?: string | null;
+}
 
 export interface DetailedProductModel extends ProductViewModel {
   sku: string;
   description: string;
   longDescription?: string;
   galleryImages: string[];
+  galleryMedia?: {
+    type: "IMAGE" | "VIDEO";
+    url: string;
+    altText: string;
+    caption: string;
+    posterUrl?: string | null;
+  }[];
+  fabricSpecifications?: FabricSpecifications | null;
   sizes: {
     id?: string;
     sku: string;
     size: string;
+    colorName?: string | null;
     stock: number;
     available: boolean;
     pricePaise: number;
@@ -20,6 +45,34 @@ export interface DetailedProductModel extends ProductViewModel {
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface AdminProductDetail {
+  id: string;
+  name: string;
+  slug: string;
+  status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+  category: string;
+  material: string;
+  pricePaise: number;
+  description: string;
+  longDescription?: string | null;
+  badge?: "New" | "Limited" | "Atelier Pick" | "Core" | null;
+  compareAtPricePaise?: number | null;
+  fabricSpecifications?: FabricSpecifications | null;
+  media: AdminProductMediaItem[];
+  details: string[];
+  careInstructions: string[];
+  variants: {
+    id?: string;
+    sku: string;
+    size: string;
+    colorName: string;
+    colorHex?: string | null;
+    stock: number;
+    isActive?: boolean;
+  }[];
+  [key: string]: unknown;
 }
 
 export interface CategorySummary {
@@ -101,8 +154,8 @@ export async function getAdminProducts(params?: {
   };
 }
 
-export async function getAdminProductById(id: string): Promise<any> {
-  const res = await apiClient<any>(`/admin/products/${id}`);
+export async function getAdminProductById(id: string): Promise<AdminProductDetail> {
+  const res = await apiClient<AdminProductDetail>(`/admin/products/${id}`);
   return res.data;
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import {
   registerGsapPlugins,
@@ -38,7 +38,6 @@ interface SmoothScrollProviderProps {
 
 export function SmoothScrollProvider({ children }: SmoothScrollProviderProps) {
   const pathname = usePathname();
-  const [smootherActive, setSmootherActive] = useState(false);
   const smootherRef = useRef<any>(null);
 
   useEffect(() => {
@@ -47,67 +46,43 @@ export function SmoothScrollProvider({ children }: SmoothScrollProviderProps) {
     // 1. Guard against non-eligible routes or users requesting reduced motion
     if (!isEligible || isReducedMotion()) {
       if (smootherRef.current) {
-        try {
-          smootherRef.current.kill();
-          smootherRef.current = null;
-        } catch {
-          // ignore cleanup error
-        }
-        setSmootherActive(false);
+        smootherRef.current.kill();
+        smootherRef.current = null;
       }
       return;
     }
 
     // 2. Safe client plugin registration
     const { hasScrollTrigger, hasScrollSmoother } = registerGsapPlugins();
-    if (!hasScrollTrigger || !hasScrollSmoother) {
-      return;
-    }
+    if (!hasScrollTrigger) return;
 
-    // 3. Clear any existing instance to prevent duplicates during React Strict Mode / remounts
-    try {
-      const existing = ScrollSmoother.get();
-      if (existing) {
-        existing.kill();
-      }
-
+    if (hasScrollSmoother && !isTouchDevice()) {
       const wrapperEl = document.getElementById("smooth-wrapper");
       const contentEl = document.getElementById("smooth-content");
-
-      if (wrapperEl && contentEl) {
-        smootherRef.current = ScrollSmoother.create({
-          wrapper: wrapperEl,
-          content: contentEl,
-          smooth: 0.8,
-          effects: true,
-          smoothTouch: 0, // Preserve responsive native touch scrolling on mobile
-          normalizeScroll: false, // Prevent synthetic scroll locking
-        });
-
-        setSmootherActive(true);
+      try {
+        if (wrapperEl && contentEl) {
+          smootherRef.current = ScrollSmoother.create({
+            wrapper: wrapperEl,
+            content: contentEl,
+            smooth: 0.8,
+            effects: true,
+            smoothTouch: 0,
+            normalizeScroll: false,
+          });
+        }
+      } catch (error) {
+        console.info("ScrollSmoother degraded gracefully to native scroll:", error);
       }
-    } catch (err) {
-      // Graceful fallback to native scrolling if initialization encounters environment constraints
-      console.info("ScrollSmoother degraded gracefully to native scroll:", err);
-      setSmootherActive(false);
     }
 
-    // 4. Teardown lifecycle on route change or unmount
+    const refreshFrame = window.requestAnimationFrame(() => ScrollTrigger.refresh());
+
     return () => {
+      window.cancelAnimationFrame(refreshFrame);
       if (smootherRef.current) {
-        try {
-          smootherRef.current.kill();
-          smootherRef.current = null;
-        } catch {
-          // cleanup best effort
-        }
+        smootherRef.current.kill();
+        smootherRef.current = null;
       }
-      try {
-        ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
-      } catch {
-        // ignore
-      }
-      setSmootherActive(false);
     };
   }, [pathname]);
 

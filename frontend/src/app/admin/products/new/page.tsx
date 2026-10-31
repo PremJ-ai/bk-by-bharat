@@ -1,17 +1,20 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ProductCard } from "@/components/product/ProductCard";
 import type { ProductViewModel } from "@/components/product/product.types";
+import { ProductMediaManager } from "@/components/admin/ProductMediaManager";
+import {
+  emptyFabricSpecificationForm,
+  FabricSpecificationFields,
+  toFabricSpecifications,
+} from "@/components/admin/FabricSpecificationFields";
 import { createAdminProduct } from "@/lib/api/catalog";
-import { createProductMediaUploadUrl, generateAiMedia, uploadMediaAsset } from "@/lib/api/media";
+import type { AdminProductMediaItem } from "@/lib/api/media";
 import {
   ArrowLeft,
-  Sparkles,
-  Upload,
-  RefreshCw,
   CheckCircle2,
   AlertCircle,
   Eye,
@@ -22,28 +25,25 @@ import {
 
 export default function NewProductPage() {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Product Form State
-  const [name, setName] = useState("Artisan Gurkha Pant");
-  const [slug, setSlug] = useState("artisan-gurkha-pant");
-  const [sku, setSku] = useState("TRS-GRK-007");
-  const [category, setCategory] = useState("Trousers");
-  const [material, setMaterial] = useState("Heavyweight Irish Linen (340gsm)");
-  const [priceRupees, setPriceRupees] = useState("11800");
-  const [description, setDescription] = useState(
-    "Double pleated forward rise with solid brass side buckle adjusters and deep reverse pleats."
-  );
-  const [badge, setBadge] = useState<"New" | "Limited" | "Atelier Pick" | undefined>("New");
-  const [selectedSizes, setSelectedSizes] = useState<string[]>(["30", "32", "34", "36"]);
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [sku, setSku] = useState("");
+  const [colorName, setColorName] = useState("");
+  const [stockBySize, setStockBySize] = useState<Record<string, number>>({});
+  const [category, setCategory] = useState("Shirts");
+  const [material, setMaterial] = useState("");
+  const [priceRupees, setPriceRupees] = useState("");
+  const [description, setDescription] = useState("");
+  const [longDescription, setLongDescription] = useState("");
+  const [detailsText, setDetailsText] = useState("");
+  const [careInstructionsText, setCareInstructionsText] = useState("");
+  const [fabricSpecifications, setFabricSpecifications] = useState(emptyFabricSpecificationForm);
+  const [badge, setBadge] = useState<"New" | "Limited" | "Atelier Pick" | "Core" | undefined>();
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
+  const [mediaItems, setMediaItems] = useState<AdminProductMediaItem[]>([]);
 
-  // AI Media Workflow State
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [generatedImage, setGeneratedImage] = useState<string | null>(
-    "https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?auto=format&fit=crop&w=1200&q=85"
-  );
-  const [imageApproved, setImageApproved] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
@@ -58,86 +58,8 @@ export default function NewProductPage() {
     setSlug(suggested);
   };
 
-  // AI Image generation trigger
-  const handleGenerateAI = async () => {
-    try {
-      setIsGenerating(true);
-      setFeedback(null);
-      const asset = await generateAiMedia({
-        productName: name || "Bespoke Garment",
-        material: material || "Pure Linen",
-        categoryName: category,
-      });
-      setGeneratedImage(asset.url);
-      setImageApproved(false);
-    } catch (err: any) {
-      setFeedback({ type: "error", message: err?.message || "Failed to generate AI visual." });
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  // Upload product imagery directly to the public Supabase product-media bucket.
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setIsUploading(true);
-      setFeedback(null);
-
-      const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/avif"];
-      if (!allowedTypes.includes(file.type)) {
-        throw new Error("Choose a JPEG, PNG, WebP, or AVIF product image.");
-      }
-      if (file.size < 1 || file.size > 10 * 1024 * 1024) {
-        throw new Error("Product images must be between 1 byte and 10MB.");
-      }
-
-      const uploadTicket = await createProductMediaUploadUrl({
-        mimeType: file.type as "image/jpeg" | "image/png" | "image/webp" | "image/avif",
-        fileSizeBytes: file.size,
-      });
-
-      const publicKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      if (!publicKey) {
-        throw new Error("Product image storage is not configured. Contact the site administrator.");
-      }
-
-      const uploadForm = new FormData();
-      uploadForm.append("cacheControl", "3600");
-      uploadForm.append("", file);
-      const uploadResponse = await fetch(uploadTicket.signedUploadUrl, {
-        method: "PUT",
-        headers: {
-          apikey: publicKey,
-          Authorization: "Bearer " + publicKey,
-          "x-upsert": "false",
-        },
-        body: uploadForm,
-      });
-      if (!uploadResponse.ok) {
-        throw new Error("Supabase could not store this product image. Please try again.");
-      }
-
-      const asset = await uploadMediaAsset({
-        fileName: file.name,
-        mimeType: file.type as "image/jpeg" | "image/png" | "image/webp" | "image/avif",
-        storageKey: uploadTicket.storageKey,
-        fileSizeBytes: file.size,
-        altText: name + " - " + file.name,
-      });
-      setGeneratedImage(asset.url);
-      setImageApproved(true);
-    } catch (err: any) {
-      setFeedback({ type: "error", message: err?.message || "Upload failed." });
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
   const pricePaise = (parseInt(priceRupees, 10) || 0) * 100;
+  const primaryImage = mediaItems.find((item) => item.mediaType === "IMAGE" && item.isPrimary);
 
   const liveProduct: ProductViewModel = {
     id: "draft-preview",
@@ -149,7 +71,7 @@ export default function NewProductPage() {
     currency: "INR",
     stockStatus: "in_stock",
     badge,
-    imageUrl: generatedImage && imageApproved ? generatedImage : undefined,
+    imageUrl: primaryImage?.url,
     isFixture: false,
   };
 
@@ -161,45 +83,51 @@ export default function NewProductPage() {
       if (!name || name.trim().length < 2) {
         throw new Error("Product name is required.");
       }
+      if (sku.trim().length < 2) {
+        throw new Error("A base SKU prefix is required.");
+      }
+      if (colorName.trim().length < 1) {
+        throw new Error("A color name is required.");
+      }
+      if (!description || description.trim().length < 10) {
+        throw new Error("Description must be at least 10 characters.");
+      }
+      if (!material || material.trim().length < 2) {
+        throw new Error("Fabric material is required.");
+      }
       if (!pricePaise || pricePaise <= 0) {
         throw new Error("Please enter a valid price in INR.");
       }
-      if (publish && (!generatedImage || !imageApproved)) {
-        throw new Error("Publishing requires an approved product image.");
+      if (selectedSizes.length === 0) {
+        throw new Error("Select at least one size variant.");
+      }
+      if (publish && !mediaItems.some((item) => item.mediaType === "IMAGE")) {
+        throw new Error("Publishing requires at least one product image.");
       }
 
       const variants = selectedSizes.map((size) => ({
         sku: `${sku}-${size}`,
         size,
-        colorName: "Standard Atelier",
+        colorName: colorName.trim(),
         colorHex: "#0A192F",
-        stock: 8,
+        stock: stockBySize[size] ?? 0,
       }));
-
-      const media =
-        generatedImage && imageApproved
-          ? [
-              {
-                url: generatedImage,
-                altText: `${name} in ${material}`,
-                isPrimary: true,
-                sortOrder: 0,
-                source: "AI_GENERATED" as const,
-              },
-            ]
-          : [];
 
       const payload = {
         name,
         slug: slug || undefined,
         description,
+        longDescription: longDescription.trim() || undefined,
         material,
+        fabricSpecifications: toFabricSpecifications(fabricSpecifications),
         categoryName: category,
         pricePaise,
         badge: badge || undefined,
         status: (publish ? "PUBLISHED" : "DRAFT") as "PUBLISHED" | "DRAFT",
         variants,
-        media,
+        details: detailsText.split("\n").map((item) => item.trim()).filter(Boolean),
+        careInstructions: careInstructionsText.split("\n").map((item) => item.trim()).filter(Boolean),
+        media: mediaItems,
       };
 
       const res = await createAdminProduct(payload);
@@ -339,13 +267,21 @@ export default function NewProductPage() {
                 </label>
                 <select
                   value={badge || ""}
-                  onChange={(e) => setBadge((e.target.value as any) || undefined)}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setBadge(
+                      value === "New" || value === "Limited" || value === "Atelier Pick" || value === "Core"
+                        ? value
+                        : undefined
+                    );
+                  }}
                   className="w-full bg-canvas border border-border p-2.5 text-xs text-ink focus:border-gold focus:outline-none"
                 >
                   <option value="">None (Standard)</option>
                   <option value="New">New</option>
                   <option value="Limited">Limited</option>
                   <option value="Atelier Pick">Atelier Pick</option>
+                  <option value="Core">Core</option>
                 </select>
               </div>
             </div>
@@ -398,6 +334,11 @@ export default function NewProductPage() {
               />
             </div>
 
+            <FabricSpecificationFields
+              value={fabricSpecifications}
+              onChange={setFabricSpecifications}
+            />
+
             <div className="space-y-1">
               <label className="text-xs uppercase tracking-caps text-muted font-medium block">
                 Selling Price (INR) *
@@ -409,7 +350,7 @@ export default function NewProductPage() {
                   value={priceRupees}
                   onChange={(e) => setPriceRupees(e.target.value)}
                   className="w-full bg-canvas border border-border pl-8 pr-4 py-2.5 text-xs text-ink font-semibold tabular-nums focus:border-gold focus:outline-none"
-                  placeholder="11800"
+                  placeholder="e.g. 11800"
                 />
               </div>
             </div>
@@ -420,11 +361,49 @@ export default function NewProductPage() {
               </label>
               <textarea
                 rows={3}
+                maxLength={1000}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 className="w-full bg-canvas border border-border p-2.5 text-xs text-ink focus:border-gold focus:outline-none leading-relaxed"
-                placeholder="Brief craft notes regarding cut, drape, and buttons..."
+                placeholder="Describe the cut, drape, construction, and defining details."
               />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs uppercase tracking-caps text-muted font-medium block">
+                Long Description
+              </label>
+              <textarea
+                rows={4}
+                maxLength={4000}
+                value={longDescription}
+                onChange={(event) => setLongDescription(event.target.value)}
+                className="w-full bg-canvas border border-border p-2.5 text-xs text-ink focus:border-gold focus:outline-none leading-relaxed"
+                placeholder="Optional extended product story and construction notes."
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="space-y-1 text-xs uppercase tracking-caps text-muted">
+                Garment details (one per line)
+                <textarea
+                  rows={4}
+                  value={detailsText}
+                  onChange={(event) => setDetailsText(event.target.value)}
+                  className="w-full bg-canvas border border-border p-2.5 text-xs normal-case tracking-normal text-ink focus:border-gold focus:outline-none"
+                  placeholder={"Double-pleated front\nHorn buttons"}
+                />
+              </label>
+              <label className="space-y-1 text-xs uppercase tracking-caps text-muted">
+                Care instructions (one per line)
+                <textarea
+                  rows={4}
+                  value={careInstructionsText}
+                  onChange={(event) => setCareInstructionsText(event.target.value)}
+                  className="w-full bg-canvas border border-border p-2.5 text-xs normal-case tracking-normal text-ink focus:border-gold focus:outline-none"
+                  placeholder={"Dry clean only\nStore on a padded hanger"}
+                />
+              </label>
             </div>
 
             {/* Sizing Matrix */}
@@ -459,136 +438,47 @@ export default function NewProductPage() {
                   );
                 })}
               </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="space-y-1 text-xs uppercase tracking-caps text-muted">
+                  Color name *
+                  <input
+                    value={colorName}
+                    onChange={(event) => setColorName(event.target.value)}
+                    maxLength={50}
+                    placeholder="e.g. Midnight navy"
+                    className="w-full border border-border bg-canvas p-2.5 text-xs normal-case tracking-normal text-ink focus:border-gold focus:outline-none"
+                  />
+                </label>
+              </div>
+              {selectedSizes.length > 0 && (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {selectedSizes.map((size) => (
+                    <label key={size} className="space-y-1 text-[10px] uppercase tracking-caps text-muted">
+                      Size {size} stock
+                      <input
+                        type="number"
+                        min="0"
+                        value={stockBySize[size] ?? 0}
+                        onChange={(event) => setStockBySize({
+                          ...stockBySize,
+                          [size]: Math.max(0, Number(event.target.value) || 0),
+                        })}
+                        className="w-full border border-border bg-canvas p-2 text-xs normal-case tracking-normal text-ink focus:border-gold focus:outline-none"
+                      />
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Section 3: AI Media Generation Workflow */}
-          <div className="bg-surface border border-border p-6 space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-border">
-              <div className="space-y-0.5">
-                <h2 className="font-display text-lg text-ink font-normal flex items-center space-x-2">
-                  <Sparkles className="w-4 h-4 text-gold" />
-                  <span>AI Atelier Media Generation</span>
-                </h2>
-                <p className="text-muted text-[11px] font-sans">
-                  Produces 4:5 editorial imagery honoring the specified textile and silhouette.
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-surface-muted border border-border p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-ink">Synthesis Art Direction</span>
-                <span className="text-[10px] uppercase tracking-caps text-gold font-semibold">
-                  Studio Lighting &middot; Neutral Void
-                </span>
-              </div>
-              <p className="text-xs text-muted leading-relaxed font-sans">
-                Prompt template automatically synthesizes: <span className="text-ink font-medium">{name}</span> constructed from <span className="text-ink font-medium">{material}</span> with architectural studio crop.
-              </p>
-
-              <div className="pt-2 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={handleGenerateAI}
-                  disabled={isGenerating}
-                  className="bg-navy text-canvas hover:bg-gold hover:text-navy px-4 py-2 text-xs uppercase tracking-caps font-semibold flex items-center space-x-2 transition-colors disabled:opacity-50"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Synthesizing Atelier Asset...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Generate AI Product Image</span>
-                    </>
-                  )}
-                </button>
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/avif"
-                  className="hidden"
-                  onChange={handleFileUpload}
-                />
-
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="border border-border hover:border-gold px-4 py-2 text-xs uppercase tracking-caps font-medium text-ink flex items-center space-x-2 transition-colors disabled:opacity-50"
-                >
-                  {isUploading ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Upload className="w-3.5 h-3.5 text-muted" />
-                  )}
-                  <span>{isUploading ? "Uploading..." : "Upload File"}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const url = prompt("Enter image URL:", "https://images.unsplash.com/photo-1594938298603-c8148c4dae35?auto=format&fit=crop&w=800&q=80");
-                    if (url) {
-                      setGeneratedImage(url);
-                      setImageApproved(true);
-                    }
-                  }}
-                  className="border border-border hover:border-gold px-4 py-2 text-xs uppercase tracking-caps font-medium text-ink flex items-center space-x-2 transition-colors"
-                >
-                  <span>Set Image URL</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Generated Image Review Section */}
-            {generatedImage && (
-              <div className="border border-border p-4 bg-canvas space-y-3">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="inline-flex items-center space-x-1 text-gold font-medium">
-                    <Sparkles className="w-3 h-3" />
-                    <span>AI-Generated / Staged Asset</span>
-                  </span>
-                  <span className="text-[11px] text-muted">Dimensions: 800 x 1000px</span>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-border">
-                  <span className="text-xs text-muted font-sans">
-                    {imageApproved
-                      ? "Approved for primary storefront display."
-                      : "Review asset and approve for catalog display."}
-                  </span>
-
-                  <div className="flex items-center space-x-2">
-                    <button
-                      type="button"
-                      onClick={handleGenerateAI}
-                      className="border border-border hover:border-gold px-3 py-1.5 text-xs text-ink flex items-center space-x-1"
-                    >
-                      <RefreshCw className="w-3 h-3 text-muted" />
-                      <span>Regenerate</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setImageApproved(!imageApproved)}
-                      className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wider flex items-center space-x-1 ${
-                        imageApproved
-                          ? "bg-stock-ok text-white"
-                          : "bg-gold text-navy hover:bg-gold/90"
-                      }`}
-                    >
-                      <CheckCircle2 className="w-3 h-3" />
-                      <span>{imageApproved ? "Approved As Primary" : "Approve & Use Image"}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+          <div className="bg-surface border border-border p-6">
+            <ProductMediaManager
+              items={mediaItems}
+              onChange={setMediaItems}
+              productName={name}
+              material={material}
+            />
           </div>
         </div>
 

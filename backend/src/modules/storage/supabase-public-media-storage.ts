@@ -1,13 +1,20 @@
 import crypto from "node:crypto";
 import { BadRequestError, ServiceUnavailableError } from "../../lib/errors.js";
 
-const MAX_MEDIA_BYTES = 10 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 const MIME_EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/webp": "webp",
   "image/avif": "avif",
+  "video/mp4": "mp4",
+  "video/webm": "webm",
 };
+
+function maxFileSize(mimeType: string): number {
+  return mimeType.startsWith("video/") ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+}
 
 function encodeStoragePath(path: string): string {
   return path.split("/").map((part) => encodeURIComponent(part)).join("/");
@@ -78,14 +85,14 @@ export class SupabasePublicMediaStorage {
   }): Promise<{ signedUploadUrl: string; storageKey: string; publicUrl: string }> {
     const extension = MIME_EXTENSIONS[input.mimeType];
     if (!extension) {
-      throw new BadRequestError("Product images must be JPEG, PNG, WebP, or AVIF.");
+      throw new BadRequestError("Product media must be JPEG, PNG, WebP, AVIF, MP4, or WebM.");
     }
     if (
       !Number.isInteger(input.fileSizeBytes) ||
       input.fileSizeBytes < 1 ||
-      input.fileSizeBytes > MAX_MEDIA_BYTES
+      input.fileSizeBytes > maxFileSize(input.mimeType)
     ) {
-      throw new BadRequestError("Product images must be between 1 byte and 10MB.");
+      throw new BadRequestError("Product media exceeds the allowed size for its file type.");
     }
 
     const config = this.getConfig();
@@ -127,14 +134,14 @@ export class SupabasePublicMediaStorage {
       throw new BadRequestError("The uploaded product image has an invalid storage path.");
     }
     if (!MIME_EXTENSIONS[input.mimeType]) {
-      throw new BadRequestError("Product images must be JPEG, PNG, WebP, or AVIF.");
+      throw new BadRequestError("Product media must be JPEG, PNG, WebP, AVIF, MP4, or WebM.");
     }
     if (
       !Number.isInteger(input.fileSizeBytes) ||
       input.fileSizeBytes < 1 ||
-      input.fileSizeBytes > MAX_MEDIA_BYTES
+      input.fileSizeBytes > maxFileSize(input.mimeType)
     ) {
-      throw new BadRequestError("Product images must be between 1 byte and 10MB.");
+      throw new BadRequestError("Product media exceeds the allowed size for its file type.");
     }
 
     const config = this.getConfig();
@@ -149,11 +156,11 @@ export class SupabasePublicMediaStorage {
     const actualSize = Number(response.headers.get("content-length") || 0);
     const actualMime = (response.headers.get("content-type") || "").split(";")[0].toLowerCase();
 
-    if (actualSize > MAX_MEDIA_BYTES || (actualSize > 0 && actualSize !== input.fileSizeBytes)) {
-      throw new BadRequestError("The product-image size does not match the selected file.");
+    if (actualSize > maxFileSize(input.mimeType) || (actualSize > 0 && actualSize !== input.fileSizeBytes)) {
+      throw new BadRequestError("The product-media size does not match the selected file.");
     }
     if (actualMime && actualMime !== input.mimeType) {
-      throw new BadRequestError("The uploaded content type does not match the selected product image.");
+      throw new BadRequestError("The uploaded content type does not match the selected product media.");
     }
 
     return {

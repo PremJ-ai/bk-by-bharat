@@ -39,8 +39,9 @@ export function EditorialCropReveal({
           ease: MOTION_TOKENS.eases.editorial,
           scrollTrigger: {
             trigger: frameRef.current,
-            start: "top 80%",
+            start: "top 88%",
             once: true,
+            invalidateOnRefresh: true,
           },
         }
       );

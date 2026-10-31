@@ -125,9 +125,19 @@ export class MediaService {
       );
     }
 
-    const allowedMimes = ["image/webp", "image/jpeg", "image/png", "image/avif"];
+    const allowedMimes = [
+      "image/webp",
+      "image/jpeg",
+      "image/png",
+      "image/avif",
+      "video/mp4",
+      "video/webm",
+    ];
     if (!allowedMimes.includes(mimeType.toLowerCase())) {
-      throw new BadRequestError(`Unsupported media format: ${mimeType}. Allowed formats: webp, jpeg, png, avif.`);
+      throw new BadRequestError(`Unsupported media format: ${mimeType}. Allowed formats: webp, jpeg, png, avif, mp4, webm.`);
+    }
+    if (fileBase64 && mimeType.startsWith("video/")) {
+      throw new BadRequestError("Videos must be uploaded through the signed product-media upload flow.");
     }
 
     let finalUrl = url;

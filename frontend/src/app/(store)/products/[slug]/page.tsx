@@ -6,8 +6,8 @@ import { notFound } from "next/navigation";
 import { AnnouncementBar } from "@/components/layout/AnnouncementBar";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
-import { getProductBySlug } from "@/components/product/mockFixtures";
 import { getStorefrontProductBySlug, type DetailedProductModel } from "@/lib/api/catalog";
+import { ApiError } from "@/lib/api/client";
 import { formatINR } from "@/components/product/ProductCard";
 import { useCart } from "@/context/CartContext";
 import {
@@ -22,7 +22,7 @@ import {
   Sparkles,
   Loader2,
 } from "lucide-react";
-import { ProductMedia } from "@/components/media/ProductMedia";
+import { ProductGallery } from "@/components/media/ProductGallery";
 import { EditorialCropReveal } from "@/components/motion/EditorialCropReveal";
 import { ParallaxFrame } from "@/components/motion/ParallaxFrame";
 
@@ -32,41 +32,50 @@ interface ProductPageProps {
 
 export default function ProductDetailPage({ params }: ProductPageProps) {
   const resolvedParams = use(params);
-  const initialFixture = getProductBySlug(resolvedParams.slug);
-
-  const [product, setProduct] = useState<DetailedProductModel | null>(initialFixture as any || null);
-  const [loading, setLoading] = useState<boolean>(!initialFixture);
+  const [product, setProduct] = useState<DetailedProductModel | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [productNotFound, setProductNotFound] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   const { addItem } = useCart();
 
   // State
-  const [selectedSize, setSelectedSize] = useState<string>(
-    initialFixture?.sizes.find((s) => s.available)?.size || ""
-  );
-  const [selectedColor, setSelectedColor] = useState<string>(
-    initialFixture?.colors[0]?.name || "Standard"
-  );
-  const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
+  const [selectedSize, setSelectedSize] = useState("");
+  const [selectedColor, setSelectedColor] = useState("");
   const [openAccordion, setOpenAccordion] = useState<string | null>("details");
   const [addedAnimation, setAddedAnimation] = useState<boolean>(false);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setCatalogError(null);
+    setProductNotFound(false);
 
     getStorefrontProductBySlug(resolvedParams.slug)
       .then((data) => {
         if (!cancelled && data) {
           setProduct(data);
           setLoading(false);
-          setSelectedSize((prev) => prev || data.sizes?.find((s) => s.available)?.size || data.sizes?.[0]?.size || "");
-          setSelectedColor((prev) => prev || data.colors?.[0]?.name || "Standard");
+          const firstAvailableColor = data.colors.find((color) =>
+            data.sizes.some((size) => size.colorName === color.name && size.available)
+          );
+          const initialColor = firstAvailableColor?.name || data.colors[0]?.name || "Standard";
+          setSelectedColor(initialColor);
+          setSelectedSize(
+            data.sizes.find(
+              (size) => size.available && (!size.colorName || size.colorName === initialColor)
+            )?.size || ""
+          );
         }
       })
-      .catch((err) => {
+      .catch((error: unknown) => {
         if (!cancelled) {
-          console.warn("Backend product detail fetch fallback:", err?.message);
-          if (!initialFixture) {
-            notFound();
+          if (error instanceof ApiError && error.status === 404) {
+            setProductNotFound(true);
+          } else {
+            console.error("Unable to load product detail from the catalog API:", error);
+            setCatalogError("This product is temporarily unavailable. Please try again shortly.");
           }
           setLoading(false);
         }
@@ -75,7 +84,7 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [resolvedParams.slug, initialFixture]);
+  }, [resolvedParams.slug, retryCount]);
 
   if (loading && !product) {
     return (
@@ -85,24 +94,52 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
     );
   }
 
-  if (!product) {
+  if (productNotFound) {
     notFound();
   }
 
-  const productImages = Array.from(
-    new Set(
-      [product.imageUrl, ...(product.galleryImages || [])].filter(
-        (imageUrl): imageUrl is string => Boolean(imageUrl)
-      )
-    )
-  );
-  const activeImageUrl = productImages[activeImageIndex] || product.imageUrl;
+  if (!product && catalogError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-canvas px-6 text-center">
+        <p role="alert" className="max-w-md text-sm leading-relaxed text-muted">{catalogError}</p>
+        <button
+          type="button"
+          onClick={() => setRetryCount((count) => count + 1)}
+          className="mt-5 bg-navy px-5 py-3 text-xs font-semibold uppercase tracking-caps text-canvas transition-colors hover:bg-gold hover:text-navy"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
 
-  const selectedSizeObj = product.sizes?.find((s) => s.size === selectedSize);
+  if (!product) {
+    return null;
+  }
+
+  const selectedSizeObj = product.sizes?.find(
+    (size) =>
+      size.size === selectedSize &&
+      (!size.colorName || !selectedColor || size.colorName === selectedColor)
+  );
   const isAvailable = selectedSizeObj?.available ?? false;
+  const fabricSpecifications = product.fabricSpecifications;
+  const specificationRows = [
+    { label: "Fabric", value: fabricSpecifications?.fabricName },
+    { label: "Composition", value: fabricSpecifications?.composition },
+    { label: "Weight", value: fabricSpecifications?.weightGsm ? `${fabricSpecifications.weightGsm} GSM` : undefined },
+    { label: "Weave", value: fabricSpecifications?.weave },
+    { label: "Texture", value: fabricSpecifications?.texture },
+    { label: "Stretch", value: fabricSpecifications?.stretch },
+    { label: "Finish", value: fabricSpecifications?.finish },
+    { label: "Fit", value: fabricSpecifications?.fit },
+    { label: "Pattern", value: fabricSpecifications?.pattern },
+    { label: "Colour", value: fabricSpecifications?.colour },
+    { label: "Origin", value: fabricSpecifications?.origin },
+  ].filter((row) => row.value !== undefined && row.value !== null && row.value !== "");
 
   const handleAddToCart = () => {
-    if (!selectedSize || !isAvailable) return;
+    if (!selectedSize || !selectedSizeObj?.available) return;
 
     addItem({
       productId: product.id,
@@ -112,7 +149,7 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
       material: product.material,
       size: selectedSize,
       color: selectedColor,
-      pricePaise: product.pricePaise,
+      pricePaise: selectedSizeObj.pricePaise,
       quantity: 1,
       imageUrl: product.imageUrl,
     });
@@ -163,53 +200,23 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start pb-20 border-b border-border">
           {/* Left: Media Gallery Column (7 cols) */}
           <div className="lg:col-span-7 space-y-4">
-            {/* Primary Frame with EditorialCropReveal & ParallaxFrame */}
             <EditorialCropReveal>
               <ParallaxFrame speed={0.04}>
-                <div className="relative aspect-[4/5] bg-surface-muted border border-border overflow-hidden">
-                  <ProductMedia
-                    src={activeImageUrl}
-                    alt={product.name}
-                    priority={true}
-                    aspectRatio="aspect-[4/5]"
+                <div className="relative">
+                  <ProductGallery
+                    name={product.name}
+                    primaryImage={product.imageUrl}
+                    galleryImages={product.galleryImages}
+                    media={product.galleryMedia}
                   />
-
-                  {/* Badge */}
                   {product.badge && (
-                    <span className="absolute top-4 left-4 bg-navy text-canvas text-xs uppercase tracking-caps px-3 py-1 font-medium shadow-sm z-10">
+                    <span className="absolute left-4 top-4 z-10 bg-navy px-3 py-1 text-xs font-medium uppercase tracking-caps text-canvas shadow-sm">
                       {product.badge}
                     </span>
                   )}
                 </div>
               </ParallaxFrame>
             </EditorialCropReveal>
-
-            {/* Actual product-image thumbnails from the catalog media gallery */}
-            {productImages.length > 1 && (
-              <div className="grid grid-cols-4 gap-3">
-                {productImages.slice(0, 4).map((imageUrl, idx) => (
-                  <button
-                    key={imageUrl}
-                    type="button"
-                    onClick={() => setActiveImageIndex(idx)}
-                    className={`aspect-[4/5] bg-surface-muted border transition-all overflow-hidden ${
-                      activeImageIndex === idx
-                        ? "border-navy ring-1 ring-navy"
-                        : "border-border hover:border-gold"
-                    }`}
-                    aria-label={`View product image ${idx + 1}`}
-                    aria-pressed={activeImageIndex === idx}
-                  >
-                    <img
-                      src={imageUrl}
-                      alt={`${product.name} — view ${idx + 1}`}
-                      loading="lazy"
-                      className="h-full w-full object-cover"
-                    />
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Right: Purchase & Story Column (5 cols) */}
@@ -224,11 +231,9 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
               </h1>
               <div className="flex items-center justify-between pt-1">
                 <span className="font-sans font-semibold text-2xl text-ink tabular-nums">
-                  {formatINR(product.pricePaise)}
+                  {formatINR(selectedSizeObj?.pricePaise ?? product.pricePaise)}
                 </span>
-                <span className="text-xs text-muted font-sans">
-                  All applicable duties included &middot; Free courier
-                </span>
+                <span className="text-xs text-muted font-sans">Price shown in INR</span>
               </div>
             </div>
 
@@ -251,7 +256,15 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
                     <button
                       key={color.name}
                       type="button"
-                      onClick={() => setSelectedColor(color.name)}
+                      onClick={() => {
+                        setSelectedColor(color.name);
+                        setSelectedSize((currentSize) => {
+                          const availableVariant = product.sizes.find(
+                            (size) => size.colorName === color.name && size.available
+                          );
+                          return availableVariant?.size || currentSize;
+                        });
+                      }}
                       className={`w-7 h-7 rounded-full border-2 transition-transform ${
                         selectedColor === color.name
                           ? "border-navy scale-110"
@@ -260,6 +273,7 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
                       style={{ backgroundColor: color.hex }}
                       title={color.name}
                       aria-label={color.name}
+                      aria-pressed={selectedColor === color.name}
                     />
                   ))}
                 </div>
@@ -282,24 +296,30 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
               </div>
 
               <div className="grid grid-cols-4 gap-2">
-                {product.sizes.map((s) => {
-                  const isSelected = selectedSize === s.size;
+                {[...new Set(product.sizes.map((size) => size.size))].map((size) => {
+                  const variant = product.sizes.find(
+                    (item) =>
+                      item.size === size &&
+                      (!item.colorName || !selectedColor || item.colorName === selectedColor)
+                  );
+                  const isSelected = selectedSize === size;
                   return (
                     <button
-                      key={s.size}
+                      key={size}
                       type="button"
-                      disabled={!s.available}
-                      onClick={() => setSelectedSize(s.size)}
+                      disabled={!variant?.available}
+                      onClick={() => setSelectedSize(size)}
                       className={`py-3 text-xs uppercase tracking-caps font-semibold border transition-all text-center focus:outline-none ${
-                        !s.available
+                        !variant?.available
                           ? "bg-surface-muted text-muted/40 border-border/60 cursor-not-allowed line-through"
                           : isSelected
                           ? "bg-navy text-canvas border-navy shadow-sm"
                           : "bg-surface text-ink border-border hover:border-gold hover:text-gold"
                       }`}
-                      aria-label={`Size ${s.size} ${!s.available ? "out of stock" : ""}`}
+                      aria-label={`Size ${size} ${!variant?.available ? "out of stock" : ""}`}
+                      aria-pressed={isSelected}
                     >
-                      {s.size}
+                      {size}
                     </button>
                   );
                 })}
@@ -310,7 +330,7 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
                 {isAvailable ? (
                   <span className="inline-flex items-center text-stock-ok space-x-1.5 font-medium">
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>In stock at Delhi atelier &mdash; ready for immediate dispatch</span>
+                    <span>Selected size is in stock</span>
                   </span>
                 ) : (
                   <span className="inline-flex items-center text-rust space-x-1.5 font-medium">
@@ -343,7 +363,7 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
               </button>
 
               <p className="text-center text-[11px] text-muted font-sans">
-                Guest checkout &middot; No account creation required &middot; Direct WhatsApp concierge
+                Guest checkout &middot; No account required
               </p>
             </div>
 
@@ -365,12 +385,34 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
                 </button>
                 {openAccordion === "details" && (
                   <div className="pt-3 pb-2 text-xs text-muted leading-relaxed font-sans space-y-2">
-                    <p>{product.longDescription}</p>
-                    <ul className="list-disc pl-4 space-y-1 pt-1">
-                      {product.details.map((d, i) => (
-                        <li key={i}>{d}</li>
-                      ))}
-                    </ul>
+                    {product.longDescription && <p>{product.longDescription}</p>}
+                    {specificationRows.length > 0 && (
+                      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 border-y border-border py-3">
+                        {specificationRows.map(({ label, value }) => (
+                          <div key={label} className="contents">
+                            <dt className="font-medium text-ink">{label}</dt>
+                            <dd>{value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
+                    {fabricSpecifications?.fibrePercentages && fabricSpecifications.fibrePercentages.length > 0 && (
+                      <ul className="list-disc space-y-1 pl-4">
+                        {fabricSpecifications.fibrePercentages.map((fibre) => (
+                          <li key={fibre.fibre}>{fibre.fibre}: {fibre.percentage}%</li>
+                        ))}
+                      </ul>
+                    )}
+                    {product.details.length > 0 && (
+                      <ul className="list-disc space-y-1 pl-4 pt-1">
+                        {product.details.map((detail, index) => <li key={index}>{detail}</li>)}
+                      </ul>
+                    )}
+                    {product.longDescription === undefined &&
+                      specificationRows.length === 0 &&
+                      product.details.length === 0 && (
+                        <p>No additional garment details have been provided.</p>
+                      )}
                   </div>
                 )}
               </div>
@@ -391,14 +433,9 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
                 </button>
                 {openAccordion === "fit" && (
                   <div className="pt-3 pb-2 text-xs text-muted leading-relaxed font-sans space-y-2">
-                    <p>
-                      Cut with a relaxed, architectural ease through the chest and shoulders.
-                      True to size for a structured drape; size down if you prefer a slim-fitting profile.
-                    </p>
-                    <div className="bg-surface-muted p-3 border border-border text-[11px]">
-                      <span className="font-semibold text-ink block mb-1">Complimentary Studio Alterations:</span>
-                      Include your sleeve or inseam measurements in the checkout notes, and our atelier will customize before dispatch at zero charge.
-                    </div>
+                    {fabricSpecifications?.fit
+                      ? <p>{fabricSpecifications.fit}</p>
+                      : <p>No fit guidance has been provided for this garment.</p>}
                   </div>
                 )}
               </div>
@@ -424,6 +461,7 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
                         <li key={i}>{c}</li>
                       ))}
                     </ul>
+                    {product.careInstructions.length === 0 && <p>No care instructions have been provided.</p>}
                   </div>
                 )}
               </div>
@@ -444,13 +482,7 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
                 </button>
                 {openAccordion === "shipping" && (
                   <div className="pt-3 pb-2 text-xs text-muted leading-relaxed font-sans space-y-2">
-                    <p>
-                      All garments are pressed and shipped in eco-friendly cotton garment bags via express courier.
-                      Tracking updates and payment receipt are delivered straight to your WhatsApp.
-                    </p>
-                    <p>
-                      Complimentary 7-day returns or size exchanges on all unworn items in original packaging.
-                    </p>
+                    <p>Delivery and return details are shown as part of the order checkout flow.</p>
                   </div>
                 )}
               </div>
@@ -460,15 +492,15 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
             <div className="grid grid-cols-3 gap-4 pt-4 border-t border-border text-center text-muted">
               <div className="flex flex-col items-center space-y-1.5">
                 <Scissors className="w-4 h-4 text-gold" />
-                <span className="text-[10px] uppercase tracking-wider text-ink font-medium">Bespoke Fit</span>
+                <span className="text-[10px] uppercase tracking-wider text-ink font-medium">Size selection</span>
               </div>
               <div className="flex flex-col items-center space-y-1.5">
                 <Truck className="w-4 h-4 text-gold" />
-                <span className="text-[10px] uppercase tracking-wider text-ink font-medium">Insured Transit</span>
+                <span className="text-[10px] uppercase tracking-wider text-ink font-medium">Guest checkout</span>
               </div>
               <div className="flex flex-col items-center space-y-1.5">
                 <ShieldCheck className="w-4 h-4 text-gold" />
-                <span className="text-[10px] uppercase tracking-wider text-ink font-medium">Direct UPI QR</span>
+                <span className="text-[10px] uppercase tracking-wider text-ink font-medium">Order details</span>
               </div>
             </div>
           </div>

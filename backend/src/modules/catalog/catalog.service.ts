@@ -29,8 +29,11 @@ export class CatalogService {
    * Map database product entity to Public Product View Model
    */
   mapToPublicViewModel(product: any) {
+    const imageMedia = (product.media || []).filter(
+      (m: any) => m.mediaType !== "VIDEO" && !m.mediaAsset?.mimeType?.startsWith("video/")
+    );
     const primaryMedia =
-      product.media?.find((m: any) => m.isPrimary) || product.media?.[0];
+      imageMedia.find((m: any) => m.isPrimary) || imageMedia[0];
 
     const totalStock = product.variants?.reduce(
       (sum: number, v: any) => sum + (v.stock || 0),
@@ -51,6 +54,7 @@ export class CatalogService {
       category: product.category?.name || "General",
       categorySlug: product.category?.slug || "all",
       material: product.material,
+      fabricSpecifications: product.fabricSpecifications,
       pricePaise: product.pricePaise,
       compareAtPricePaise: product.compareAtPricePaise,
       currency: product.currency || "INR",
@@ -69,6 +73,7 @@ export class CatalogService {
           id: v.id,
           sku: v.sku,
           size: v.size,
+          colorName: v.colorName,
           stock: v.stock,
           available: v.stock > 0 && v.isActive,
           pricePaise: v.priceOverridePaise || product.pricePaise,
@@ -82,7 +87,15 @@ export class CatalogService {
         ).values()
       ),
       galleryImages:
-        product.media?.map((m: any) => m.mediaAsset?.url).filter(Boolean) || [],
+        imageMedia.map((m: any) => m.mediaAsset?.url).filter(Boolean),
+      galleryMedia:
+        (product.media || []).map((m: any) => ({
+          type: m.mediaType || (m.mediaAsset?.mimeType?.startsWith("video/") ? "VIDEO" : "IMAGE"),
+          url: m.mediaAsset?.url || "",
+          altText: m.mediaAsset?.altText || product.name,
+          caption: m.caption || "",
+          posterUrl: m.posterUrl || "",
+        })).filter((m: any) => m.url),
       publishedAt: product.publishedAt,
     };
   }
@@ -100,6 +113,7 @@ export class CatalogService {
       categoryId: product.categoryId,
       categorySlug: product.category?.slug || "",
       material: product.material,
+      fabricSpecifications: product.fabricSpecifications,
       badge: product.badge,
       pricePaise: product.pricePaise,
       compareAtPricePaise: product.compareAtPricePaise,
@@ -130,6 +144,11 @@ export class CatalogService {
           mediaAssetId: m.mediaAssetId,
           url: m.mediaAsset?.url || "",
           altText: m.mediaAsset?.altText || "",
+          caption: m.caption || "",
+          posterUrl: m.posterUrl || "",
+          mediaType: m.mediaType || (m.mediaAsset?.mimeType?.startsWith("video/") ? "VIDEO" : "IMAGE"),
+          mimeType: m.mediaAsset?.mimeType || "image/webp",
+          fileSizeBytes: m.mediaAsset?.fileSizeBytes || 0,
           isPrimary: m.isPrimary,
           sortOrder: m.sortOrder,
           source: m.mediaAsset?.source,
@@ -316,6 +335,8 @@ export class CatalogService {
           url: m.mediaAsset?.url,
           altText: m.mediaAsset?.altText,
           isPrimary: m.isPrimary,
+          mediaType: m.mediaType,
+          mimeType: m.mediaAsset?.mimeType,
         })),
       };
       this.validatePublishingRules(merged);
@@ -396,7 +417,12 @@ export class CatalogService {
       throw new BadRequestError("Publishing requires at least one active variant.");
     }
 
-    if (!data.media || data.media.length === 0) {
+    const hasProductImage = data.media?.some(
+      (media: any) =>
+        media.mediaType !== "VIDEO" &&
+        !(media.mimeType || media.mediaAsset?.mimeType || "").startsWith("video/")
+    );
+    if (!hasProductImage) {
       throw new BadRequestError("Publishing requires at least one product image.");
     }
   }

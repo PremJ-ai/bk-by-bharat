@@ -30,6 +30,11 @@ export function ProductMedia({
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [videoFailed, setVideoFailed] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [src]);
 
   // Safe play helper catching unhandled play promises
   const safePlay = () => {
@@ -118,22 +123,24 @@ export function ProductMedia({
             isPlaying ? "opacity-100" : "opacity-90"
           }`}
         />
-      ) : src ? (
+      ) : src && !imageFailed ? (
         /* Image Presentation */
         <img
           src={src}
           alt={alt}
           loading={priority ? "eager" : "lazy"}
+          decoding="async"
+          onError={() => setImageFailed(true)}
           className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.025]"
         />
       ) : (
         /* Fallback placeholder */
-        <div className="flex flex-col items-center justify-center w-full h-full text-center p-6 space-y-2 select-none">
-          <span className="font-display text-4xl text-muted/30 font-medium tracking-tight">
-            {alt.split(" ").map((w) => w[0]).join("")}
+        <div role="img" aria-label={`${alt} image unavailable`} className="flex flex-col items-center justify-center w-full h-full text-center p-6 space-y-2 select-none">
+          <span aria-hidden="true" className="font-display text-4xl text-muted/30 font-medium tracking-tight">
+            {src ? "—" : alt.split(" ").map((w) => w[0]).join("")}
           </span>
           <span className="text-[10px] uppercase tracking-caps text-muted/60 font-sans">
-            Atelier Visual
+            {src ? "Image unavailable" : "Atelier Visual"}
           </span>
         </div>
       )}

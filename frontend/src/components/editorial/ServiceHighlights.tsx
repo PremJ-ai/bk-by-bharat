@@ -1,45 +1,46 @@
-import { Scissors, Truck, RefreshCw, ShieldCheck } from "lucide-react";
+import { Images, PackageCheck, ShoppingBag, Ruler } from "lucide-react";
+
+const highlights = [
+  {
+    icon: ShoppingBag,
+    title: "Guest checkout",
+    description: "Place an order without creating a customer account.",
+  },
+  {
+    icon: Images,
+    title: "Product galleries",
+    description: "Review available product images and video before choosing a piece.",
+  },
+  {
+    icon: Ruler,
+    title: "Size selection",
+    description: "See size options and current availability on each product page.",
+  },
+  {
+    icon: PackageCheck,
+    title: "Order summary",
+    description: "Review your selected items and delivery details during checkout.",
+  },
+];
 
 export function ServiceHighlights() {
-  const highlights = [
-    {
-      icon: Scissors,
-      title: "Complimentary Alterations",
-      desc: "Receive customized sleeve and hem alterations directly handled by our in-house master tailor.",
-    },
-    {
-      icon: Truck,
-      title: "Direct Insured Transit",
-      desc: "Dispatched via verified courier with real-time tracking updates delivered directly to your WhatsApp.",
-    },
-    {
-      icon: ShieldCheck,
-      title: "Transparent Verification",
-      desc: "Direct UPI/QR payment verified personally by our studio before garment preparation.",
-    },
-    {
-      icon: RefreshCw,
-      title: "7-Day Return Consideration",
-      desc: "Unworn garments in original presentation may be exchanged or returned via studio customer care.",
-    },
-  ];
-
   return (
-    <section className="bg-surface py-20 border-b border-border">
-      <div className="max-w-[1440px] mx-auto px-6 md:px-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {highlights.map((item, idx) => {
-            const Icon = item.icon;
-            return (
-              <div key={idx} className="space-y-3">
-                <div className="w-10 h-10 rounded bg-surface-muted border border-border flex items-center justify-center text-gold">
-                  <Icon className="w-5 h-5" />
-                </div>
-                <h4 className="font-display text-lg text-ink font-medium">{item.title}</h4>
-                <p className="text-muted text-sm leading-relaxed">{item.desc}</p>
+    <section className="border-b border-border bg-surface py-16 md:py-20">
+      <div className="mx-auto max-w-[1440px] px-6 md:px-12">
+        <div className="mb-10 max-w-xl">
+          <span className="mb-2 block text-xs uppercase tracking-caps text-gold">Shopping at the atelier</span>
+          <h2 className="font-display text-3xl text-ink md:text-4xl">A considered experience, from browse to order.</h2>
+        </div>
+        <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
+          {highlights.map(({ icon: Icon, title, description }) => (
+            <div key={title} className="space-y-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded border border-border bg-surface-muted text-gold">
+                <Icon className="h-5 w-5" />
               </div>
-            );
-          })}
+              <h3 className="font-display text-lg font-medium text-ink">{title}</h3>
+              <p className="text-sm leading-relaxed text-muted">{description}</p>
+            </div>
+          ))}
         </div>
       </div>
     </section>

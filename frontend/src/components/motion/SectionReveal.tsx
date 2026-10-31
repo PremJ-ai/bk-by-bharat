@@ -35,6 +35,7 @@ export function SectionReveal({
         {
           opacity: 0,
           y: yOffset,
+          willChange: "transform, opacity",
         },
         {
           opacity: 1,
@@ -44,9 +45,11 @@ export function SectionReveal({
           delay,
           scrollTrigger: {
             trigger: containerRef.current,
-            start: "top 82%",
+            start: "top 88%",
             once: true,
+            invalidateOnRefresh: true,
           },
+          clearProps: "willChange",
         }
       );
     },

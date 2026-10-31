@@ -1,6 +1,30 @@
 import { prisma } from "../../db/prisma.js";
-import type { Prisma, ProductStatus } from "@prisma/client";
+import { Prisma, type ProductStatus } from "@prisma/client";
 import type { CreateProductInput, UpdateProductInput } from "./catalog.schemas.js";
+
+function toFabricSpecifications(value: CreateProductInput["fabricSpecifications"]) {
+  if (value === undefined) return undefined;
+  if (value === null) return Prisma.DbNull;
+
+  return {
+    fabricName: value.fabricName ?? null,
+    composition: value.composition ?? null,
+    fibrePercentages: value.fibrePercentages ?? [],
+    weightGsm: value.weightGsm ?? null,
+    weave: value.weave ?? null,
+    texture: value.texture ?? null,
+    stretch: value.stretch ?? null,
+    origin: value.origin ?? null,
+    finish: value.finish ?? null,
+    fit: value.fit ?? null,
+    pattern: value.pattern ?? null,
+    colour: value.colour ?? null,
+  } satisfies Prisma.InputJsonObject;
+}
+
+function isVideoMedia(media: CreateProductInput["media"][number]): boolean {
+  return media.mediaType ? media.mediaType === "VIDEO" : media.mimeType.startsWith("video/");
+}
 
 export class CatalogRepository {
   /**
@@ -256,6 +280,7 @@ export class CatalogRepository {
           description: data.description,
           longDescription: data.longDescription,
           material: data.material,
+          fabricSpecifications: toFabricSpecifications(data.fabricSpecifications),
           badge: data.badge,
           status: data.status,
           pricePaise: data.pricePaise,
@@ -285,6 +310,10 @@ export class CatalogRepository {
 
       // 3. Create or link Media Assets
       if (data.media && data.media.length > 0) {
+        const primaryImageIndex = data.media.findIndex(
+          (media) => !isVideoMedia(media) && media.isPrimary
+        );
+        const firstImageIndex = data.media.findIndex((media) => !isVideoMedia(media));
         for (let i = 0; i < data.media.length; i++) {
           const m = data.media[i];
           const storageKey = m.storageKey || `products/${product.id}/media-${i + 1}-${Date.now()}.webp`;
@@ -309,7 +338,10 @@ export class CatalogRepository {
             data: {
               productId: product.id,
               mediaAssetId: asset.id,
-              isPrimary: m.isPrimary || i === 0,
+              mediaType: m.mediaType ?? (m.mimeType.startsWith("video/") ? "VIDEO" : "IMAGE"),
+              caption: m.caption,
+              posterUrl: m.posterUrl,
+              isPrimary: !isVideoMedia(m) && i === (primaryImageIndex >= 0 ? primaryImageIndex : firstImageIndex),
               sortOrder: m.sortOrder ?? i,
             },
           });
@@ -358,6 +390,7 @@ export class CatalogRepository {
           description: data.description !== undefined ? data.description : existing.description,
           longDescription: data.longDescription !== undefined ? data.longDescription : existing.longDescription,
           material: data.material !== undefined ? data.material : existing.material,
+          fabricSpecifications: toFabricSpecifications(data.fabricSpecifications),
           badge: data.badge !== undefined ? data.badge : existing.badge,
           status: data.status !== undefined ? data.status : existing.status,
           pricePaise: data.pricePaise !== undefined ? data.pricePaise : existing.pricePaise,
@@ -390,6 +423,10 @@ export class CatalogRepository {
       // Update media if supplied
       if (data.media) {
         await tx.productMedia.deleteMany({ where: { productId: id } });
+        const primaryImageIndex = data.media.findIndex(
+          (media) => !isVideoMedia(media) && media.isPrimary
+        );
+        const firstImageIndex = data.media.findIndex((media) => !isVideoMedia(media));
         for (let i = 0; i < data.media.length; i++) {
           const m = data.media[i];
           const storageKey = m.storageKey || `products/${id}/media-${i + 1}-${Date.now()}.webp`;
@@ -411,7 +448,10 @@ export class CatalogRepository {
             data: {
               productId: id,
               mediaAssetId: asset.id,
-              isPrimary: m.isPrimary || i === 0,
+              mediaType: m.mediaType ?? (m.mimeType.startsWith("video/") ? "VIDEO" : "IMAGE"),
+              caption: m.caption,
+              posterUrl: m.posterUrl,
+              isPrimary: !isVideoMedia(m) && i === (primaryImageIndex >= 0 ? primaryImageIndex : firstImageIndex),
               sortOrder: m.sortOrder ?? i,
             },
           });

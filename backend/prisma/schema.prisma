@@ -38,16 +38,16 @@ model AdminUser {
 }
 
 model AdminSession {
-  id               String     @id @default(uuid())
-  sessionTokenHash String     @unique
+  id               String    @id @default(uuid())
+  sessionTokenHash String    @unique
   adminUserId      String
-  adminUser        AdminUser  @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  adminUser        AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
   expiresAt        DateTime
   revokedAt        DateTime?
   ipAddress        String?
   userAgent        String?
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([adminUserId])
   @@index([sessionTokenHash])
@@ -120,28 +120,29 @@ model CollectionProduct {
 }
 
 model Product {
-  id                  String              @id @default(uuid())
-  name                String
-  slug                String              @unique
-  description         String
-  longDescription     String?
-  material            String
-  badge               String?
-  status              ProductStatus       @default(DRAFT)
-  pricePaise          Int                 // Base price in integer minor units (paise)
-  compareAtPricePaise Int?
-  currency            String              @default("INR")
-  categoryId          String
-  category            Category            @relation(fields: [categoryId], references: [id])
-  details             String[]            // Architectural tailoring bullet points
-  careInstructions    String[]
-  isFixture           Boolean             @default(false)
-  publishedAt         DateTime?
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
-  variants            ProductVariant[]
-  media               ProductMedia[]
-  collections         CollectionProduct[]
+  id                   String              @id @default(uuid())
+  name                 String
+  slug                 String              @unique
+  description          String
+  longDescription      String?
+  material             String
+  fabricSpecifications Json?
+  badge                String?
+  status               ProductStatus       @default(DRAFT)
+  pricePaise           Int // Base price in integer minor units (paise)
+  compareAtPricePaise  Int?
+  currency             String              @default("INR")
+  categoryId           String
+  category             Category            @relation(fields: [categoryId], references: [id])
+  details              String[] // Architectural tailoring bullet points
+  careInstructions     String[]
+  isFixture            Boolean             @default(false)
+  publishedAt          DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  variants             ProductVariant[]
+  media                ProductMedia[]
+  collections          CollectionProduct[]
 
   @@index([status])
   @@index([slug])
@@ -154,7 +155,7 @@ model ProductVariant {
   productId          String
   product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   sku                String   @unique
-  size               String   // S, M, L, XL, etc.
+  size               String // S, M, L, XL, etc.
   colorName          String
   colorHex           String?
   stock              Int      @default(0)
@@ -186,6 +187,11 @@ enum MediaStatus {
   FAILED
 }
 
+enum ProductMediaType {
+  IMAGE
+  VIDEO
+}
+
 model MediaAsset {
   id            String         @id @default(uuid())
   source        MediaSource    @default(UPLOADED)
@@ -207,14 +213,17 @@ model MediaAsset {
 }
 
 model ProductMedia {
-  id           String     @id @default(uuid())
+  id           String           @id @default(uuid())
   productId    String
-  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product      Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
   mediaAssetId String
-  mediaAsset   MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
-  isPrimary    Boolean    @default(false)
-  sortOrder    Int        @default(0)
-  createdAt    DateTime   @default(now())
+  mediaAsset   MediaAsset       @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  mediaType    ProductMediaType @default(IMAGE)
+  caption      String?
+  posterUrl    String?
+  isPrimary    Boolean          @default(false)
+  sortOrder    Int              @default(0)
+  createdAt    DateTime         @default(now())
 
   @@index([productId])
   @@map("product_media")
@@ -249,16 +258,16 @@ model ImageGenerationJob {
 // -----------------------------------------------------------------------------
 
 model StoreSettings {
-  id                  String   @id @default("default")
-  upiId               String   @default("atelier@bharat.upi")
-  payeeName           String   @default("Bharat Atelier New Delhi")
-  paymentInstructions String   @default("Scan QR using any UPI app (GPay, PhonePe, Paytm). Confirm order reference in remarks.")
-  qrImageUrl          String?
-  qrStorageKey        String?
-  whatsappNumber      String   @default("+919876543210")
-  invoicePrefix       String   @default("INV-2026-")
-  shippingDefaultPaise Int     @default(0)
-  updatedAt           DateTime @updatedAt
+  id                   String   @id @default("default")
+  upiId                String   @default("atelier@bharat.upi")
+  payeeName            String   @default("Bharat Atelier New Delhi")
+  paymentInstructions  String   @default("Scan QR using any UPI app (GPay, PhonePe, Paytm). Confirm order reference in remarks.")
+  qrImageUrl           String?
+  qrStorageKey         String?
+  whatsappNumber       String   @default("+919876543210")
+  invoicePrefix        String   @default("INV-2026-")
+  shippingDefaultPaise Int      @default(0)
+  updatedAt            DateTime @updatedAt
 
   @@map("store_settings")
 }
@@ -347,9 +356,9 @@ model Order {
 }
 
 model OrderItem {
-  id             String   @id @default(uuid())
+  id             String  @id @default(uuid())
   orderId        String
-  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order          Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId      String?
   variantId      String?
   productName    String
@@ -403,7 +412,7 @@ model PaymentProof {
   mimeType             String
   fileSizeBytes        Int
   status               ProofReviewStatus @default(PENDING_REVIEW)
-  transactionReference String?           // Bank / UPI UTR reference
+  transactionReference String? // Bank / UPI UTR reference
   verifiedByAdminId    String?
   verifiedAt           DateTime?
   adminNotes           String?
@@ -475,7 +484,7 @@ model RefundRecord {
   reason               String
   source               RequestSource @default(WHATSAPP)
   adminNotes           String?
-  transactionReference String?       // Bank / UPI UTR reference
+  transactionReference String? // Bank / UPI UTR reference
   processedByAdminId   String?
   processedAt          DateTime?
   createdAt            DateTime      @default(now())

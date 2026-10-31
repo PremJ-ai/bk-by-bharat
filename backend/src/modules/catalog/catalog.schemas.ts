@@ -15,13 +15,104 @@ export const mediaInputSchema = z.object({
   id: z.string().optional(),
   url: z.string().url().or(z.string().min(1)),
   altText: z.string().min(1).max(255),
+  caption: z.string().max(255).optional().nullable(),
+  posterUrl: z.string().url().optional().nullable(),
+  mediaType: z.enum(["IMAGE", "VIDEO"]).optional(),
   isPrimary: z.boolean().default(false),
   sortOrder: z.number().int().min(0).default(0),
   source: z.enum(["AI_GENERATED", "UPLOADED", "EXTERNAL_MIGRATED"]).default("UPLOADED"),
   storageKey: z.string().optional(),
-  mimeType: z.string().default("image/webp"),
+  mimeType: z.enum([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/avif",
+    "video/mp4",
+    "video/webm",
+  ]).default("image/webp"),
   fileSizeBytes: z.number().int().min(0).default(0),
+}).superRefine((media, context) => {
+  const isVideo = media.mimeType.startsWith("video/");
+  if (media.mediaType && (media.mediaType === "VIDEO") !== isVideo) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Media type must match its MIME type.",
+      path: ["mediaType"],
+    });
+  }
+  if (media.fileSizeBytes > (isVideo ? 50 : 10) * 1024 * 1024) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Media file exceeds the allowed size for its type.",
+      path: ["fileSizeBytes"],
+    });
+  }
+  if (isVideo && media.isPrimary) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A video cannot be the primary product image.",
+      path: ["isPrimary"],
+    });
+  }
+  if (!isVideo && media.posterUrl) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A poster URL is only valid for video media.",
+      path: ["posterUrl"],
+    });
+  }
 });
+
+const productMediaSchema = z.array(mediaInputSchema).default([]).superRefine((media, context) => {
+  const images = media.filter((item) => item.mimeType.startsWith("image/"));
+  const videos = media.filter((item) => item.mimeType.startsWith("video/"));
+
+  if (images.length > 4) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A product can have up to four images.",
+    });
+  }
+  if (videos.length > 1) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A product can have one video.",
+    });
+  }
+  if (images.filter((item) => item.isPrimary).length > 1) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A product can have only one primary image.",
+    });
+  }
+});
+
+const fabricSpecificationsSchema = z.object({
+  fabricName: z.string().max(200).optional(),
+  composition: z.string().max(200).optional(),
+  fibrePercentages: z.array(z.object({
+    fibre: z.string().min(1).max(60),
+    percentage: z.number().int().min(0).max(100),
+  })).max(8).optional(),
+  weightGsm: z.number().int().min(1).max(2000).optional(),
+  weave: z.string().max(100).optional(),
+  texture: z.string().max(120).optional(),
+  stretch: z.string().max(120).optional(),
+  origin: z.string().max(120).optional(),
+  finish: z.string().max(120).optional(),
+  fit: z.string().max(120).optional(),
+  pattern: z.string().max(120).optional(),
+  colour: z.string().max(120).optional(),
+}).superRefine((specifications, context) => {
+  const fibres = specifications.fibrePercentages;
+  if (fibres?.length && fibres.reduce((total, item) => total + item.percentage, 0) !== 100) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Fibre percentages must total 100%.",
+      path: ["fibrePercentages"],
+    });
+  }
+}).optional().nullable();
 
 export const createProductSchema = z.object({
   name: z.string().min(2, "Product name must be at least 2 characters").max(120),
@@ -29,6 +120,7 @@ export const createProductSchema = z.object({
   description: z.string().min(10, "Description must be at least 10 characters").max(1000),
   longDescription: z.string().max(4000).optional().nullable(),
   material: z.string().min(2).max(200),
+  fabricSpecifications: fabricSpecificationsSchema,
   categoryName: z.string().min(2).max(80),
   categorySlug: z.string().min(2).max(80).optional(),
   badge: z.enum(["New", "Limited", "Atelier Pick", "Core"]).optional().nullable(),
@@ -38,7 +130,7 @@ export const createProductSchema = z.object({
   careInstructions: z.array(z.string().min(1)).default([]),
   status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).default("DRAFT"),
   variants: z.array(variantInputSchema).min(1, "At least one size/variant must be provided"),
-  media: z.array(mediaInputSchema).default([]),
+  media: productMediaSchema,
 });
 
 export const updateProductSchema = createProductSchema.partial().extend({

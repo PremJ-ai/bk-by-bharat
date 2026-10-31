@@ -13,6 +13,30 @@ export interface MediaAssetDto {
   provenance?: string;
 }
 
+export type ProductMediaMimeType =
+  | "image/jpeg"
+  | "image/png"
+  | "image/webp"
+  | "image/avif"
+  | "video/mp4"
+  | "video/webm";
+
+export interface AdminProductMediaItem {
+  id?: string;
+  mediaAssetId?: string;
+  url: string;
+  altText: string;
+  caption?: string | null;
+  posterUrl?: string | null;
+  mediaType: "IMAGE" | "VIDEO";
+  mimeType: ProductMediaMimeType;
+  fileSizeBytes: number;
+  isPrimary: boolean;
+  sortOrder: number;
+  source: MediaAssetDto["source"];
+  storageKey?: string;
+}
+
 export async function generateAiMedia(data: {
   productName: string;
   material: string;
@@ -27,7 +51,7 @@ export async function generateAiMedia(data: {
 }
 
 export async function createProductMediaUploadUrl(data: {
-  mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/avif";
+  mimeType: ProductMediaMimeType;
   fileSizeBytes: number;
 }): Promise<{ signedUploadUrl: string; storageKey: string; publicUrl: string }> {
   const res = await apiClient<{ signedUploadUrl: string; storageKey: string; publicUrl: string }>(
@@ -42,7 +66,7 @@ export async function createProductMediaUploadUrl(data: {
 
 export async function uploadMediaAsset(data: {
   fileName: string;
-  mimeType: "image/jpeg" | "image/png" | "image/webp" | "image/avif";
+  mimeType: ProductMediaMimeType;
   storageKey: string;
   fileSizeBytes: number;
   altText: string;
