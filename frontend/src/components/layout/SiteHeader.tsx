@@ -141,7 +141,7 @@ export function SiteHeader() {
       ref={headerRef}
       style={isLandingPage ? { top: announcementOffset } : undefined}
       data-scrolled={isScrolled ? "true" : "false"}
-      className={`${isLandingPage ? "fixed" : "sticky"} inset-x-0 z-50 border-b transition-all duration-300 ${isLandingPage && isScrolled
+      className={`${isLandingPage ? "fixed top-0" : "sticky top-0"} inset-x-0 z-50 border-b transition-all duration-300 ${!isLandingPage || isScrolled
         ? "border-[#e6dccf]/90 bg-[#fbf7f0]/96 shadow-[0_8px_24px_rgba(48,34,25,0.08)] backdrop-blur-xl"
         : "border-[#e6dccf]/35 bg-[#fbf7f0]/70 shadow-none backdrop-blur-md"}`}
     >
