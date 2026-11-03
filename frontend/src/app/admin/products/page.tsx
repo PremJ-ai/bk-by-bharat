@@ -117,7 +117,7 @@ export default function AdminProductsPage() {
       {/* Filter and Search Bar */}
       <div className="bg-surface border border-border p-4 flex flex-col md:flex-row justify-between gap-4">
         {/* Status Tabs */}
-        <div role="tablist" aria-label="Filter products by status" className="flex items-center space-x-1 text-xs">
+        <div role="group" aria-label="Filter products by status" className="flex items-center space-x-1 text-xs">
           {[
             { id: "ALL", label: "All Items" },
             { id: "PUBLISHED", label: "Published" },
@@ -127,8 +127,7 @@ export default function AdminProductsPage() {
             <button
               key={tab.id}
               type="button"
-              role="tab"
-              aria-selected={statusFilter === tab.id}
+              aria-pressed={statusFilter === tab.id}
               onClick={() => setStatusFilter(tab.id)}
               className={`admin-filter-tab px-3 py-1.5 rounded text-xs font-medium transition-colors ${
                 statusFilter === tab.id
