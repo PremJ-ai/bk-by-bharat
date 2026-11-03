@@ -128,7 +128,7 @@ export default function AdminOrdersPage() {
       {/* Filter and Search Bar */}
       <div className="bg-surface border border-border p-4 flex flex-col md:flex-row justify-between gap-4">
         {/* Status Filters */}
-        <div role="tablist" aria-label="Filter orders by status" className="flex flex-wrap items-center gap-1.5 text-xs">
+        <div role="group" aria-label="Filter orders by status" className="flex flex-wrap items-center gap-1.5 text-xs">
           {[
             { id: "ALL", label: "All Orders" },
             { id: "AWAITING_ADMIN_REVIEW", label: "Awaiting Review" },
@@ -141,8 +141,7 @@ export default function AdminOrdersPage() {
             <button
               key={tab.id}
               type="button"
-              role="tab"
-              aria-selected={statusFilter === tab.id}
+              aria-pressed={statusFilter === tab.id}
               onClick={() => setStatusFilter(tab.id)}
               className={`admin-filter-tab px-3 py-1.5 text-xs font-medium transition-colors ${
                 statusFilter === tab.id
