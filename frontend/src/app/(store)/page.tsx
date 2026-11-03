@@ -97,7 +97,7 @@ function CategoryTiles({
 
 export default async function StorefrontHomePage() {
   const [newestResult, featuredResult, categoriesResult] = await Promise.allSettled([
-    getStorefrontProducts({ limit: 4, sortBy: "newest" }),
+    getStorefrontProducts({ limit: 6, sortBy: "newest" }),
     getStorefrontProducts({ limit: 8, sortBy: "featured" }),
     getStorefrontCategories(),
   ]);
@@ -149,7 +149,7 @@ export default async function StorefrontHomePage() {
               <span className="mb-2 block text-xs font-medium uppercase tracking-caps text-gold">Just arrived</span>
               <h2 className="font-display text-3xl font-normal text-ink md:text-5xl">New Arrivals</h2>
             </div>
-            <span className="text-xs uppercase tracking-caps text-muted">{newest.total} available pieces</span>
+            <div className="text-right"><span className="block text-xs uppercase tracking-caps text-muted">{newest.total} available pieces</span><span className="mt-1 block text-[10px] text-muted/80">Product image first · model film on hover when available</span></div>
           </SectionReveal>
           <ProductGrid products={newest.items} unavailable={newestError} emptyMessage="New arrivals will appear here when available." />
         </section>
