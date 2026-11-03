@@ -1,10 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { apiClient } from "@/lib/api/client";
 import type { AdminUserDTO } from "@/lib/api/types";
-import { ShieldCheck, Database, Key, Server, CheckCircle2, ArrowRight } from "lucide-react";
-import Link from "next/link";
+import {
+  Activity,
+  ArrowUpRight,
+  CheckCircle2,
+  Database,
+  KeyRound,
+  MessageCircle,
+  Package,
+  QrCode,
+  Server,
+  ShieldCheck,
+  ShoppingBag,
+  Sparkles,
+} from "lucide-react";
 
 interface HealthStatus {
   status: string;
@@ -12,190 +25,303 @@ interface HealthStatus {
   timestamp: string;
 }
 
+function StatusText({ value, pending = false }: { value: boolean | null; pending?: boolean }) {
+  if (pending) return <span className="text-slate-500">Checking…</span>;
+  if (value === null) return <span className="text-rose-600">Unavailable</span>;
+  return value ? (
+    <span className="text-emerald-700">Connected</span>
+  ) : (
+    <span className="text-rose-600">Needs attention</span>
+  );
+}
+
 export default function AdminOverviewPage() {
   const [admin, setAdmin] = useState<AdminUserDTO | null>(null);
   const [health, setHealth] = useState<HealthStatus | null>(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+
     async function loadData() {
       try {
         const [sessionRes, healthRes] = await Promise.all([
           apiClient<AdminUserDTO>("/admin-auth/session"),
           apiClient<HealthStatus>("/health/ready"),
         ]);
+        if (!isMounted) return;
         setAdmin(sessionRes.data);
         setHealth(healthRes.data);
       } catch (err) {
         console.error("Failed to load admin telemetry", err);
+      } finally {
+        if (isMounted) setHasLoaded(true);
       }
     }
+
     loadData();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
+  const apiConnected = health ? health.status === "ready" : null;
+  const databaseConnected = health ? health.database === "connected" : null;
+  const accountActive = admin ? admin.status === "ACTIVE" : null;
+
+  const statCards = [
+    {
+      label: "Express API",
+      value: health ? (apiConnected ? "Operational" : "Unavailable") : "Checking",
+      note: "Live readiness endpoint",
+      icon: Server,
+      tone: "blue",
+      healthy: apiConnected,
+    },
+    {
+      label: "PostgreSQL database",
+      value: health ? (databaseConnected ? "Connected" : "Unavailable") : "Checking",
+      note: "Database readiness check",
+      icon: Database,
+      tone: "green",
+      healthy: databaseConnected,
+    },
+    {
+      label: "Administrator",
+      value: admin?.role || "Verifying",
+      note: admin?.username || "Authenticated account",
+      icon: KeyRound,
+      tone: "purple",
+      healthy: accountActive,
+    },
+    {
+      label: "Account status",
+      value: admin?.status || (hasLoaded ? "Not verified" : "Checking"),
+      note: "Current admin account",
+      icon: ShieldCheck,
+      tone: "pink",
+      healthy: accountActive,
+    },
+  ];
+
+  const actions = [
+    {
+      href: "/admin/products",
+      title: "Manage products",
+      description: "Catalogue, images and availability",
+      icon: Package,
+      tone: "pink",
+    },
+    {
+      href: "/admin/orders",
+      title: "Review orders",
+      description: "Payment and fulfilment queue",
+      icon: ShoppingBag,
+      tone: "blue",
+    },
+    {
+      href: "/admin/settings/payment",
+      title: "Payment settings",
+      description: "UPI details and customer instructions",
+      icon: QrCode,
+      tone: "green",
+    },
+    {
+      href: "/admin/whatsapp",
+      title: "WhatsApp activity",
+      description: "Message log and delivery states",
+      icon: MessageCircle,
+      tone: "purple",
+    },
+  ];
+
   return (
-    <div className="space-y-8">
-      {/* Welcome Banner */}
-      <div className="bg-surface border border-border p-8 relative overflow-hidden">
-        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gold" />
-        <div className="max-w-2xl">
-          <span className="text-xs uppercase tracking-caps text-gold font-medium block mb-2">
-            Secure Session Verified
+    <div className="admin-dashboard space-y-6">
+      <section data-admin-reveal className="admin-welcome">
+        <div className="flex min-w-0 flex-col justify-center">
+          <span className="admin-welcome-kicker">
+            <Sparkles className="h-3.5 w-3.5" />
+            Bharat Atelier · Operations
           </span>
-          <h1 className="font-display text-3xl md:text-4xl text-ink font-normal mb-3">
-            Welcome, {admin?.username || "Administrator"}
+          <h1 className="admin-dashboard-title mt-3">
+            Welcome back{admin?.username ? `, ${admin.username.split("@")[0]}` : ""}.
           </h1>
-          <p className="text-muted text-sm leading-relaxed font-sans">
-            You are authenticated via Argon2id password verification and database-backed session tokens.
-            Express server security controls, CSRF defense, and rate limits are actively guarding all endpoints.
+          <p className="admin-dashboard-subtitle max-w-2xl">
+            Your atelier workspace is ready. Review the live service status and continue with the
+            tasks that keep the store moving.
           </p>
         </div>
-      </div>
-
-      {/* Infrastructure Telemetry Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-surface p-6 border border-border space-y-3">
-          <div className="w-9 h-9 rounded bg-stock-ok/10 text-stock-ok flex items-center justify-center">
-            <Server className="w-5 h-5" />
+        <div className="admin-welcome-quote">
+          <p>“Good work is built on thoughtful details and steady progress.”</p>
+          <span />
+          <div className="mt-4 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.13em] text-[#95627c]">
+            <Activity className="h-3.5 w-3.5" />
+            Atelier operations
           </div>
-          <span className="text-[11px] uppercase tracking-caps text-muted block">
-            Express Engine
-          </span>
-          <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-stock-ok" />
-            <span className="font-sans font-semibold text-ink text-base">
-              Online &middot; Port 4000
+        </div>
+      </section>
+
+      <section data-admin-reveal className="admin-stat-grid" aria-label="Live system status">
+        {statCards.map(({ label, value, note, icon: Icon, tone, healthy }) => (
+          <article key={label} className="admin-stat-card">
+            <div className={`admin-icon-tile admin-icon-tile--${tone}`}>
+              <Icon className="h-5 w-5" />
+            </div>
+            <div className="admin-stat-label mt-4">{label}</div>
+            <div className="admin-stat-value">{value}</div>
+            <div className="admin-stat-note flex items-center gap-1.5">
+              {healthy === null ? (
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+              ) : (
+                <span className={`h-1.5 w-1.5 rounded-full ${healthy ? "bg-emerald-500" : "bg-rose-500"}`} />
+              )}
+              <span>{note}</span>
+            </div>
+          </article>
+        ))}
+      </section>
+
+      <section data-admin-reveal className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+        <div className="admin-panel">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="admin-panel-title">System health</h2>
+              <p className="admin-panel-caption">Live information returned by the backend</p>
+            </div>
+            <span className="admin-icon-tile admin-icon-tile--green">
+              <Activity className="h-5 w-5" />
             </span>
           </div>
-          <p className="text-muted text-xs">Helmet, CORS, Rate Limiters Active</p>
-        </div>
 
-        <div className="bg-surface p-6 border border-border space-y-3">
-          <div className="w-9 h-9 rounded bg-stock-ok/10 text-stock-ok flex items-center justify-center">
-            <Database className="w-5 h-5" />
-          </div>
-          <span className="text-[11px] uppercase tracking-caps text-muted block">
-            PostgreSQL + Prisma
-          </span>
-          <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-stock-ok" />
-            <span className="font-sans font-semibold text-ink text-base">
-              {health?.database === "connected" ? "Connected" : "Verifying..."}
-            </span>
-          </div>
-          <p className="text-muted text-xs">Migrations applied &amp; schema in sync</p>
-        </div>
+          <div className="mt-3">
+            <div className="admin-status-row">
+              <div className="admin-status-meta">
+                <span className="admin-icon-tile admin-icon-tile--blue h-8 w-8">
+                  <Server className="h-4 w-4" />
+                </span>
+                <span>
+                  <span className="admin-status-title block">Express API</span>
+                  <span className="admin-status-description block">Health readiness endpoint</span>
+                </span>
+              </div>
+              <span className="admin-status-value">
+                <StatusText value={apiConnected} pending={!hasLoaded} />
+              </span>
+            </div>
 
-        <div className="bg-surface p-6 border border-border space-y-3">
-          <div className="w-9 h-9 rounded bg-gold/10 text-gold flex items-center justify-center">
-            <Key className="w-5 h-5" />
-          </div>
-          <span className="text-[11px] uppercase tracking-caps text-muted block">
-            Session Security
-          </span>
-          <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-stock-ok" />
-            <span className="font-sans font-semibold text-ink text-base">
-              Opaque DB Token
-            </span>
-          </div>
-          <p className="text-muted text-xs">HttpOnly &middot; SameSite Lax &middot; Rotated</p>
-        </div>
+            <div className="admin-status-row">
+              <div className="admin-status-meta">
+                <span className="admin-icon-tile admin-icon-tile--green h-8 w-8">
+                  <Database className="h-4 w-4" />
+                </span>
+                <span>
+                  <span className="admin-status-title block">PostgreSQL + Prisma</span>
+                  <span className="admin-status-description block">Database connection check</span>
+                </span>
+              </div>
+              <span className="admin-status-value">
+                <StatusText value={databaseConnected} pending={!hasLoaded} />
+              </span>
+            </div>
 
-        <div className="bg-surface p-6 border border-border space-y-3">
-          <div className="w-9 h-9 rounded bg-navy/10 text-navy flex items-center justify-center">
-            <ShieldCheck className="w-5 h-5" />
-          </div>
-          <span className="text-[11px] uppercase tracking-caps text-muted block">
-            CSRF &amp; Origin Defense
-          </span>
-          <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-stock-ok" />
-            <span className="font-sans font-semibold text-ink text-base">
-              Double-Submit Active
-            </span>
-          </div>
-          <p className="text-muted text-xs">Mutating calls verify Origin &amp; Token</p>
-        </div>
-      </div>
-
-      {/* Milestone Roadmap & Next Gate */}
-      <div className="bg-surface border border-border p-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between pb-6 border-b border-border mb-6">
-          <div>
-            <span className="text-xs uppercase tracking-caps text-gold font-medium block mb-1">
-              Architecture Delivery State
-            </span>
-            <h2 className="font-display text-2xl text-ink font-normal">
-              Milestone 0: Operational Baseline Established
-            </h2>
-          </div>
-          <span className="mt-3 md:mt-0 inline-flex items-center space-x-1.5 text-xs text-stock-ok bg-stock-ok/10 px-3 py-1.5 rounded font-medium">
-            <CheckCircle2 className="w-4 h-4" />
-            <span>Milestone 0 Acceptance Criteria Satisfied</span>
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-sm">
-          <div className="space-y-3">
-            <h3 className="font-display text-lg text-ink font-medium">
-              Completed in Milestone 0
-            </h3>
-            <ul className="space-y-2 text-muted text-xs font-sans">
-              <li className="flex items-center space-x-2">
-                <span className="text-stock-ok font-bold">✓</span>
-                <span>Separate Next.js App Router and Express API applications</span>
-              </li>
-              <li className="flex items-center space-x-2">
-                <span className="text-stock-ok font-bold">✓</span>
-                <span>PostgreSQL instance, Prisma ORM, migrations, and schema definition</span>
-              </li>
-              <li className="flex items-center space-x-2">
-                <span className="text-stock-ok font-bold">✓</span>
-                <span>Argon2id password hashing &amp; database-backed session management</span>
-              </li>
-              <li className="flex items-center space-x-2">
-                <span className="text-stock-ok font-bold">✓</span>
-                <span>One-time server-side admin bootstrap CLI (no public registration)</span>
-              </li>
-              <li className="flex items-center space-x-2">
-                <span className="text-stock-ok font-bold">✓</span>
-                <span>Secure cookies, session rotation on login, revocation on logout</span>
-              </li>
-              <li className="flex items-center space-x-2">
-                <span className="text-stock-ok font-bold">✓</span>
-                <span>CSRF protection, Origin validation, and login rate limiting</span>
-              </li>
-              <li className="flex items-center space-x-2">
-                <span className="text-stock-ok font-bold">✓</span>
-                <span>Canonical OpenAPI 3.1 specification (/contracts/openapi.yaml)</span>
-              </li>
-              <li className="flex items-center space-x-2">
-                <span className="text-stock-ok font-bold">✓</span>
-                <span>Storefront homepage with luxury design tokens from design.md</span>
-              </li>
-            </ul>
-          </div>
-
-          <div className="space-y-3 bg-surface-muted p-6 border border-border">
-            <h3 className="font-display text-lg text-ink font-medium">
-              Awaiting User Approval: Milestone 1
-            </h3>
-            <p className="text-muted text-xs leading-relaxed font-sans">
-              As mandated by project specifications, development stops here pending explicit authorization.
-              Milestone 1 will implement the full frontend skeleton: collections, product detail page, cart drawer,
-              guest checkout shell, admin product editor, and WhatsApp status displays.
-            </p>
-            <div className="pt-2">
-              <Link
-                href="/"
-                className="inline-flex items-center space-x-2 text-navy text-xs uppercase tracking-caps font-semibold hover:text-gold transition-colors"
-              >
-                <span>View Live Storefront &rarr;</span>
-              </Link>
+            <div className="admin-status-row">
+              <div className="admin-status-meta">
+                <span className="admin-icon-tile admin-icon-tile--purple h-8 w-8">
+                  <ShieldCheck className="h-4 w-4" />
+                </span>
+                <span>
+                  <span className="admin-status-title block">Admin session</span>
+                  <span className="admin-status-description block">Current authenticated identity</span>
+                </span>
+              </div>
+              <span className="admin-status-value">
+                <StatusText value={accountActive} pending={!hasLoaded} />
+              </span>
             </div>
           </div>
         </div>
-      </div>
+
+        <div className="admin-panel">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="admin-panel-title">Quick actions</h2>
+              <p className="admin-panel-caption">Jump directly to a store operation</p>
+            </div>
+            <span className="admin-icon-tile admin-icon-tile--orange">
+              <ArrowUpRight className="h-5 w-5" />
+            </span>
+          </div>
+
+          <div className="admin-quick-grid">
+            {actions.map(({ href, title, description, icon: Icon, tone }) => (
+              <Link key={href} href={href} className={`admin-quick-link admin-quick-link--${tone}`}>
+                <span className="flex items-center gap-2">
+                  <Icon className="h-4 w-4" />
+                  <strong>{title}</strong>
+                </span>
+                <span>
+                  <span>{description}</span>
+                  <ArrowUpRight className="ml-2 h-3.5 w-3.5 shrink-0" />
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section data-admin-reveal className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)]">
+        <div className="admin-panel">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="admin-panel-title">Workspace details</h2>
+              <p className="admin-panel-caption">Authenticated administrator context</p>
+            </div>
+            <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+          </div>
+          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="rounded-xl bg-slate-50 p-4">
+              <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500">Signed-in user</span>
+              <p className="mt-2 break-all text-sm font-bold text-slate-800">{admin?.username || "Verifying session…"}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-4">
+              <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500">Access role</span>
+              <p className="mt-2 text-sm font-bold text-slate-800">{admin?.role || "—"}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-4">
+              <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500">Account status</span>
+              <p className="mt-2 text-sm font-bold text-slate-800">{admin?.status || "—"}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-4">
+              <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500">Last health check</span>
+              <p className="mt-2 text-sm font-bold text-slate-800">
+                {health?.timestamp
+                  ? new Date(health.timestamp).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
+                  : "Not available"}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="admin-panel">
+          <div className="admin-icon-tile admin-icon-tile--pink">
+            <Activity className="h-5 w-5" />
+          </div>
+          <h2 className="admin-panel-title mt-4">Store analytics</h2>
+          <p className="admin-panel-caption mt-1">
+            Analytics integration is not connected yet.
+          </p>
+          <div className="admin-empty-analytics mt-4">
+            Sales trends, visitor activity and conversion metrics will appear here after the
+            analytics integration is configured. No sample figures are shown as live store data.
+          </div>
+          <Link
+            href="/admin/products"
+            className="mt-4 inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[#d52f7a] transition-colors hover:text-[#a91f5e]"
+          >
+            Continue to catalogue <ArrowUpRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      </section>
     </div>
   );
 }
