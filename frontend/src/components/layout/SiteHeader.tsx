@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useGSAP } from "@gsap/react";
 import { Menu, Search, ShoppingBag, Shield, X, ArrowUpRight } from "lucide-react";
 import { useCart } from "@/context/CartContext";
@@ -18,6 +18,8 @@ import {
 
 export function SiteHeader() {
   const router = useRouter();
+  const pathname = usePathname();
+  const isLandingPage = pathname === "/";
   const { openCart, itemCount } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -137,9 +139,9 @@ export function SiteHeader() {
   return (
     <header
       ref={headerRef}
-      style={{ top: announcementOffset }}
+      style={isLandingPage ? { top: announcementOffset } : undefined}
       data-scrolled={isScrolled ? "true" : "false"}
-      className={`fixed inset-x-0 z-50 border-b transition-all duration-300 ${isScrolled
+      className={`${isLandingPage ? "fixed" : "sticky"} inset-x-0 z-50 border-b transition-all duration-300 ${isLandingPage && isScrolled
         ? "border-[#e6dccf]/90 bg-[#fbf7f0]/96 shadow-[0_8px_24px_rgba(48,34,25,0.08)] backdrop-blur-xl"
         : "border-[#e6dccf]/35 bg-[#fbf7f0]/70 shadow-none backdrop-blur-md"}`}
     >
