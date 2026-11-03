@@ -1,22 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api/client";
 import type { AdminUserDTO } from "@/lib/api/types";
 import {
-  Shield,
+  LayoutDashboard,
   Package,
   ShoppingBag,
-  Settings,
   LogOut,
   Loader2,
   ExternalLink,
-  UserCheck,
-  MessageSquare,
+  UserRound,
+  MessageCircle,
   QrCode,
+  Menu,
+  X,
+  ShieldCheck,
 } from "lucide-react";
+import "./admin-ui.css";
+
+const navLinks = [
+  { href: "/admin", label: "Overview", icon: LayoutDashboard },
+  { href: "/admin/products", label: "Products & Media", icon: Package },
+  { href: "/admin/orders", label: "Orders & Verification", icon: ShoppingBag },
+  { href: "/admin/settings/payment", label: "Payment QR & Bank", icon: QrCode },
+  { href: "/admin/whatsapp", label: "WhatsApp Logs", icon: MessageCircle },
+];
 
 export default function AdminLayout({
   children,
@@ -25,12 +36,18 @@ export default function AdminLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const pageRef = useRef<HTMLDivElement>(null);
   const [admin, setAdmin] = useState<AdminUserDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  // Skip session check for login page
   const isLoginPage = pathname === "/admin/login";
+  const currentNav = navLinks.find((item) =>
+    item.href === "/admin" ? pathname === item.href : pathname.startsWith(item.href)
+  );
+  const currentLabel = currentNav?.label || "Admin workspace";
+  const initials = admin?.username?.trim()?.charAt(0)?.toUpperCase() || "A";
 
   useEffect(() => {
     if (isLoginPage) {
@@ -47,7 +64,7 @@ export default function AdminLayout({
           setAdmin(res.data);
           setLoading(false);
         }
-      } catch (err) {
+      } catch {
         if (isMounted) {
           router.replace("/admin/login");
         }
@@ -61,6 +78,52 @@ export default function AdminLayout({
     };
   }, [pathname, isLoginPage, router]);
 
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (isLoginPage) return;
+
+    const pageRoot = pageRef.current?.firstElementChild as HTMLElement | null;
+    if (!pageRoot) return;
+
+    let targets = Array.from(pageRoot.children).filter(
+      (element): element is HTMLElement => element instanceof HTMLElement
+    );
+
+    if (targets.length <= 1 && pageRoot.firstElementChild instanceof HTMLElement) {
+      targets = Array.from(pageRoot.firstElementChild.children).filter(
+        (element): element is HTMLElement => element instanceof HTMLElement
+      );
+    }
+
+    if (targets.length === 0) return;
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion || !("IntersectionObserver" in window)) return;
+
+    targets.forEach((element, index) => {
+      element.dataset.adminReveal = "hidden";
+      element.style.setProperty("--admin-reveal-delay", `${Math.min(index * 55, 220)}ms`);
+    });
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && entry.target instanceof HTMLElement) {
+            entry.target.dataset.adminReveal = "visible";
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.08, rootMargin: "0px 0px -28px 0px" }
+    );
+
+    targets.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, [pathname, isLoginPage]);
+
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
@@ -68,7 +131,7 @@ export default function AdminLayout({
         method: "POST",
       });
     } catch {
-      // Ignore errors on logout
+      // Session is cleared locally and the protected route redirects on next navigation.
     } finally {
       setAdmin(null);
       setIsLoggingOut(false);
@@ -83,141 +146,142 @@ export default function AdminLayout({
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-surface-muted flex flex-col items-center justify-center p-6 text-ink">
-        <div className="text-center space-y-4">
-          <Loader2 className="w-8 h-8 animate-spin text-gold mx-auto" />
-          <p className="text-xs uppercase tracking-caps text-muted font-medium font-sans">
-            Verifying Atelier Security Session...
-          </p>
-        </div>
+      <div className="admin-ui admin-loading flex min-h-screen flex-col items-center justify-center gap-4">
+        <Loader2 className="h-8 w-8 animate-spin text-gold" />
+        <p className="text-xs font-semibold uppercase tracking-caps text-muted">
+          Verifying secure admin session…
+        </p>
       </div>
     );
   }
 
-  if (!admin) {
-    return null;
-  }
-
-  const navLinks = [
-    { href: "/admin", label: "Overview", icon: Shield },
-    { href: "/admin/products", label: "Products & Media", icon: Package },
-    { href: "/admin/orders", label: "Orders & Verification", icon: ShoppingBag },
-    { href: "/admin/settings/payment", label: "Payment QR & Bank", icon: QrCode },
-    { href: "/admin/whatsapp", label: "WhatsApp Logs", icon: MessageSquare },
-  ];
+  if (!admin) return null;
 
   return (
-    <div className="min-h-screen bg-surface-muted text-ink flex flex-col md:flex-row antialiased">
-      {/* Admin Sidebar Navigation */}
-      <aside className="w-full md:w-64 bg-navy text-canvas p-6 flex flex-col justify-between border-r border-navy-strong flex-shrink-0">
-        <div>
-          {/* Logo / Badge */}
-          <div className="flex items-center space-x-3 mb-8 pb-6 border-b border-white/10">
-            <div className="w-8 h-8 rounded bg-gold/20 border border-gold/40 flex items-center justify-center text-gold">
-              <Shield className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="font-display text-lg text-canvas block leading-tight">
-                BHARAT
-              </span>
-              <span className="text-[9px] uppercase tracking-caps text-gold font-sans font-medium">
-                Atelier Operations
-              </span>
-            </div>
-          </div>
+    <div className="admin-ui">
+      <div className="admin-shell">
+        <button
+          type="button"
+          aria-label="Close navigation menu"
+          className={`admin-mobile-backdrop ${mobileNavOpen ? "is-open" : ""}`}
+          onClick={() => setMobileNavOpen(false)}
+          tabIndex={mobileNavOpen ? 0 : -1}
+        />
 
-          {/* Navigation Links */}
-          <nav className="space-y-1.5 text-xs uppercase tracking-caps font-medium">
-            {navLinks.map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                item.href === "/admin"
-                  ? pathname === "/admin"
-                  : pathname.startsWith(item.href);
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center space-x-3 px-3.5 py-2.5 rounded transition-colors ${
-                    isActive
-                      ? "bg-white/10 text-gold font-semibold"
-                      : "text-canvas/70 hover:text-canvas hover:bg-white/5"
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-
-        {/* User Identity and Actions */}
-        <div className="pt-6 border-t border-white/10 space-y-4">
-          <div className="flex items-center space-x-3 px-1">
-            <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-canvas/80">
-              <UserCheck className="w-4 h-4" />
-            </div>
-            <div className="overflow-hidden">
-              <span className="block text-xs font-medium text-canvas truncate">
-                {admin.username}
+        <aside className={`admin-sidebar ${mobileNavOpen ? "is-open" : ""}`} aria-label="Admin navigation">
+          <div>
+            <Link href="/admin" className="admin-brand no-underline">
+              <span className="admin-brand-mark">B</span>
+              <span>
+                <span className="admin-brand-title block">BHARAT</span>
+                <span className="admin-brand-subtitle block">Atelier operations</span>
               </span>
-              <span className="block text-[10px] text-gold uppercase tracking-wider">
-                {admin.role} &middot; {admin.status}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-2 pt-2">
-            <Link
-              href="/"
-              target="_blank"
-              className="flex-1 inline-flex items-center justify-center space-x-1.5 bg-white/5 hover:bg-white/10 text-canvas/80 text-[11px] uppercase tracking-wider py-2 px-2 transition-colors rounded"
-            >
-              <span>Storefront</span>
-              <ExternalLink className="w-3 h-3" />
             </Link>
 
-            <button
-              type="button"
-              onClick={handleLogout}
-              disabled={isLoggingOut}
-              className="inline-flex items-center justify-center space-x-1.5 bg-rust/20 hover:bg-rust/30 text-canvas text-[11px] uppercase tracking-wider py-2 px-3 transition-colors rounded border border-rust/40"
-              title="Sign Out"
-            >
-              {isLoggingOut ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <LogOut className="w-3.5 h-3.5" />
-              )}
-            </button>
+            <div className="admin-nav-label">Workspace</div>
+            <nav className="admin-nav">
+              {navLinks.map((item) => {
+                const Icon = item.icon;
+                const isActive =
+                  item.href === "/admin"
+                    ? pathname === item.href
+                    : pathname.startsWith(item.href);
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={isActive ? "page" : undefined}
+                    className="admin-nav-link"
+                  >
+                    <span className="admin-nav-icon">
+                      <Icon className="h-[17px] w-[17px]" />
+                    </span>
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
           </div>
+
+          <div className="admin-sidebar-bottom">
+            <div className="admin-user-row">
+              <span className="admin-avatar">{initials}</span>
+              <span className="admin-user-meta">
+                <span className="admin-user-name block">{admin.username}</span>
+                <span className="admin-user-role block">
+                  {admin.role} · {admin.status}
+                </span>
+              </span>
+            </div>
+
+            <div className="admin-sidebar-actions">
+              <Link
+                href="/"
+                target="_blank"
+                rel="noreferrer"
+                className="admin-sidebar-action"
+              >
+                <span>View storefront</span>
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Link>
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                className="admin-sidebar-action admin-sidebar-action--logout"
+                aria-label="Sign out"
+                title="Sign out"
+              >
+                {isLoggingOut ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <LogOut className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+          </div>
+        </aside>
+
+        <div className="admin-main">
+          <header className="admin-topbar">
+            <div className="admin-topbar-left">
+              <button
+                type="button"
+                className="admin-mobile-toggle"
+                aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
+                aria-expanded={mobileNavOpen}
+                onClick={() => setMobileNavOpen((open) => !open)}
+              >
+                {mobileNavOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+              </button>
+              <div className="admin-breadcrumb">
+                Atelier <span className="px-1.5 text-slate-300">/</span>
+                <strong>{currentLabel}</strong>
+              </div>
+            </div>
+
+            <div className="admin-topbar-right">
+              <span className="admin-session-pill">
+                <span className="admin-session-dot" />
+                <ShieldCheck className="h-3.5 w-3.5" />
+                <span>Secure admin session</span>
+              </span>
+              <span className="hidden items-center gap-2 sm:flex">
+                <span className="admin-avatar">{initials}</span>
+                <span className="hidden max-w-[150px] truncate text-[10px] font-semibold text-slate-600 md:inline">
+                  {admin.username}
+                </span>
+              </span>
+            </div>
+          </header>
+
+          <main className="admin-content">
+            <div key={pathname} ref={pageRef} className="admin-page-transition">
+              {children}
+            </div>
+          </main>
         </div>
-      </aside>
-
-      {/* Main Admin Surface */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Header */}
-        <header className="bg-surface border-b border-border h-16 px-6 md:px-10 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <span className="text-xs uppercase tracking-caps text-muted font-medium font-sans">
-              Operational Workspace &middot; Milestone 1 Complete
-            </span>
-          </div>
-
-          <div className="flex items-center space-x-4">
-            <span className="inline-flex items-center space-x-1.5 text-xs text-stock-ok bg-stock-ok/10 px-2.5 py-1 rounded">
-              <span className="w-2 h-2 rounded-full bg-stock-ok animate-pulse" />
-              <span className="font-medium">Express API &amp; DB Connected</span>
-            </span>
-          </div>
-        </header>
-
-        {/* Content View */}
-        <main className="flex-1 p-6 md:p-10 max-w-[1440px] w-full">
-          {children}
-        </main>
       </div>
     </div>
   );
