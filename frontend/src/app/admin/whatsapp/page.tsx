@@ -116,7 +116,7 @@ export default function AdminWhatsAppPage() {
       {/* Filter and Search Bar */}
       <div className="bg-surface border border-border p-4 flex flex-col md:flex-row justify-between gap-4">
         {/* Direction Filter */}
-        <div role="tablist" aria-label="Filter WhatsApp message direction" className="flex items-center space-x-2 text-xs">
+        <div role="group" aria-label="Filter WhatsApp message direction" className="flex items-center space-x-2 text-xs">
           {[
             { id: "all", label: "All Messages" },
             { id: "outbound", label: "Outbound Only" },
@@ -125,8 +125,7 @@ export default function AdminWhatsAppPage() {
             <button
               key={tab.id}
               type="button"
-              role="tab"
-              aria-selected={directionFilter === tab.id}
+              aria-pressed={directionFilter === tab.id}
               onClick={() => setDirectionFilter(tab.id)}
               className={`admin-filter-tab px-3 py-1.5 rounded text-xs font-medium transition-colors ${
                 directionFilter === tab.id
