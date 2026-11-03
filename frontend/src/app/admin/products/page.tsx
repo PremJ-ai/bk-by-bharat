@@ -117,7 +117,7 @@ export default function AdminProductsPage() {
       {/* Filter and Search Bar */}
       <div className="bg-surface border border-border p-4 flex flex-col md:flex-row justify-between gap-4">
         {/* Status Tabs */}
-        <div className="flex items-center space-x-1 text-xs">
+        <div role="tablist" aria-label="Filter products by status" className="flex items-center space-x-1 text-xs">
           {[
             { id: "ALL", label: "All Items" },
             { id: "PUBLISHED", label: "Published" },
@@ -127,8 +127,10 @@ export default function AdminProductsPage() {
             <button
               key={tab.id}
               type="button"
+              role="tab"
+              aria-selected={statusFilter === tab.id}
               onClick={() => setStatusFilter(tab.id)}
-              className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+              className={`admin-filter-tab px-3 py-1.5 rounded text-xs font-medium transition-colors ${
                 statusFilter === tab.id
                   ? "bg-navy text-canvas"
                   : "text-muted hover:text-ink hover:bg-surface-muted"
@@ -154,7 +156,7 @@ export default function AdminProductsPage() {
 
       {/* Product Records Table */}
       <div className="bg-surface border border-border overflow-x-auto shadow-xs">
-        <table className="w-full text-left text-xs font-sans">
+        <table key={statusFilter} className="admin-filter-content w-full text-left text-xs font-sans">
           <thead className="bg-surface-muted border-b border-border uppercase tracking-caps text-[10px] text-muted">
             <tr>
               <th className="py-3 px-4">Garment</th>
