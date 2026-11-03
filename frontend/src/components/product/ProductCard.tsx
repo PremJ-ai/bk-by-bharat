@@ -89,10 +89,19 @@ export function ProductCard({ product, priority }: ProductCardProps) {
         <div className="relative aspect-[4/5] bg-surface-muted overflow-hidden mb-4 border border-border/50">
           <ProductMedia
             src={product.imageUrl}
+            videoSrc={product.videoUrl}
+            posterSrc={product.videoPosterUrl || product.imageUrl}
             alt={product.imageAlt || product.name}
             priority={priority}
             aspectRatio="aspect-[4/5]"
+            autoplayOnHover
           />
+          {product.videoUrl && (
+            <span className="pointer-events-none absolute bottom-3 left-3 z-10 inline-flex items-center gap-1.5 rounded-full bg-[#2d211b]/75 px-2.5 py-1 text-[9px] font-medium uppercase tracking-[0.14em] text-white backdrop-blur-sm">
+              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[#d8b47c]" />
+              Model film · Hover to play
+            </span>
+          )}
 
           {/* Restrained Badge */}
           {product.badge && (

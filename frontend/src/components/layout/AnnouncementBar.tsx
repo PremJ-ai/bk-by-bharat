@@ -1,10 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
 export function AnnouncementBar() {
   const [isOpen, setIsOpen] = useState(true);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--store-announcement-height",
+      isOpen ? "32px" : "0px"
+    );
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

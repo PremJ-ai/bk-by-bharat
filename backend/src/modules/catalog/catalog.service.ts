@@ -34,6 +34,10 @@ export class CatalogService {
     );
     const primaryMedia =
       imageMedia.find((m: any) => m.isPrimary) || imageMedia[0];
+    const videoMedia = (product.media || []).find(
+      (m: any) =>
+        m.mediaType === "VIDEO" || m.mediaAsset?.mimeType?.startsWith("video/")
+    );
 
     const totalStock = product.variants?.reduce(
       (sum: number, v: any) => sum + (v.stock || 0),
@@ -63,6 +67,8 @@ export class CatalogService {
       totalStock,
       imageUrl: primaryMedia?.mediaAsset?.url || "",
       imageAlt: primaryMedia?.mediaAsset?.altText || product.name,
+      videoUrl: videoMedia?.mediaAsset?.url || undefined,
+      videoPosterUrl: videoMedia?.posterUrl || primaryMedia?.mediaAsset?.url || undefined,
       isFixture: product.isFixture,
       description: product.description,
       longDescription: product.longDescription,
