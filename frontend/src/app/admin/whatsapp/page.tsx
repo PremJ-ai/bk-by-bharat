@@ -116,7 +116,7 @@ export default function AdminWhatsAppPage() {
       {/* Filter and Search Bar */}
       <div className="bg-surface border border-border p-4 flex flex-col md:flex-row justify-between gap-4">
         {/* Direction Filter */}
-        <div className="flex items-center space-x-2 text-xs">
+        <div role="group" aria-label="Filter WhatsApp message direction" className="flex items-center space-x-2 text-xs">
           {[
             { id: "all", label: "All Messages" },
             { id: "outbound", label: "Outbound Only" },
@@ -125,8 +125,9 @@ export default function AdminWhatsAppPage() {
             <button
               key={tab.id}
               type="button"
+              aria-pressed={directionFilter === tab.id}
               onClick={() => setDirectionFilter(tab.id)}
-              className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+              className={`admin-filter-tab px-3 py-1.5 rounded text-xs font-medium transition-colors ${
                 directionFilter === tab.id
                   ? "bg-navy text-canvas font-semibold"
                   : "text-muted hover:text-ink hover:bg-surface-muted"
@@ -158,7 +159,7 @@ export default function AdminWhatsAppPage() {
             <p className="text-xs text-muted">Retrieving WhatsApp dispatch audit log...</p>
           </div>
         ) : (
-          <table className="w-full text-left text-xs font-sans">
+          <table key={directionFilter} className="admin-filter-content w-full text-left text-xs font-sans">
             <thead className="bg-surface-muted border-b border-border uppercase tracking-caps text-[10px] text-muted">
               <tr>
                 <th className="py-3 px-4">Direction &middot; Status</th>

@@ -128,7 +128,7 @@ export default function AdminOrdersPage() {
       {/* Filter and Search Bar */}
       <div className="bg-surface border border-border p-4 flex flex-col md:flex-row justify-between gap-4">
         {/* Status Filters */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+        <div role="group" aria-label="Filter orders by status" className="flex flex-wrap items-center gap-1.5 text-xs">
           {[
             { id: "ALL", label: "All Orders" },
             { id: "AWAITING_ADMIN_REVIEW", label: "Awaiting Review" },
@@ -141,8 +141,9 @@ export default function AdminOrdersPage() {
             <button
               key={tab.id}
               type="button"
+              aria-pressed={statusFilter === tab.id}
               onClick={() => setStatusFilter(tab.id)}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`admin-filter-tab px-3 py-1.5 text-xs font-medium transition-colors ${
                 statusFilter === tab.id
                   ? "bg-navy text-canvas font-semibold"
                   : "text-muted hover:text-ink hover:bg-surface-muted"
@@ -174,7 +175,7 @@ export default function AdminOrdersPage() {
             <p className="text-xs text-muted">Loading orders from PostgreSQL...</p>
           </div>
         ) : (
-          <table className="w-full text-left text-xs font-sans">
+          <table key={statusFilter} className="admin-filter-content w-full text-left text-xs font-sans">
             <thead className="bg-surface-muted border-b border-border uppercase tracking-caps text-[10px] text-muted">
               <tr>
                 <th className="py-3 px-4">Order Reference</th>
