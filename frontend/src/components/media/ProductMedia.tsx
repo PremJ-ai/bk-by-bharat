@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useState } from "react";
+import { Pause, Play } from "lucide-react";
 import { isReducedMotion } from "@/lib/motion/gsap";
 
 interface ProductMediaProps {
@@ -143,6 +144,22 @@ export function ProductMedia({
             {src ? "Image unavailable" : "Atelier Visual"}
           </span>
         </div>
+      )}
+
+      {videoSrc && !videoFailed && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            if (isPlaying) safePause();
+            else safePlay();
+          }}
+          aria-label={isPlaying ? `Pause ${alt} model video` : `Play ${alt} model video`}
+          aria-pressed={isPlaying}
+          className="absolute bottom-3 right-3 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/65 bg-[#2d211b]/75 text-white shadow-lg backdrop-blur-sm transition-all hover:scale-105 hover:bg-[#2d211b]/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+        >
+          {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 translate-x-px" />}
+        </button>
       )}
     </div>
   );
