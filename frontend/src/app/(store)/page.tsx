@@ -114,6 +114,7 @@ export default async function StorefrontHomePage() {
     console.error("Unable to load storefront categories from the catalog API:", categoriesResult.reason);
   }
   const featuredProduct = featured.items[0];
+  const editorialProduct = featured.items[1] || newest.items[0];
   const fabricProduct = await loadFeaturedFabric(featuredProduct);
   const fabricSpecifications = fabricProduct?.fabricSpecifications;
   const featuredError = featuredResult.status === "rejected";
@@ -175,7 +176,7 @@ export default async function StorefrontHomePage() {
           </section>
         )}
 
-        <EditorialSplit />
+        <EditorialSplit imageUrl={editorialProduct?.imageUrl} imageAlt={editorialProduct?.imageAlt || editorialProduct?.name} />
 
         <section className="mx-auto max-w-[1440px] border-b border-border px-6 py-16 md:px-12 md:py-24">
           <SectionReveal className="mb-8 flex flex-col justify-between gap-4 md:mb-12 md:flex-row md:items-end">
