@@ -478,6 +478,7 @@ export default function NewProductPage() {
               onChange={setMediaItems}
               productName={name}
               material={material}
+              categoryName={category}
             />
           </div>
         </div>
