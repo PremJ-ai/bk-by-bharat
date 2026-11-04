@@ -79,6 +79,60 @@ export class SupabasePublicMediaStorage {
       encodeURIComponent(config.bucket) + "/" + encodeStoragePath(storageKey);
   }
 
+  /**
+   * Persist AI-generated image bytes directly from the backend. The HF token never
+   * reaches the browser and the generated image is stored durably before a MediaAsset
+   * database row is created.
+   */
+  async storeGeneratedImage(input: {
+    bytes: Buffer;
+    mimeType: string;
+  }): Promise<{ storageKey: string; publicUrl: string; fileSizeBytes: number; mimeType: string }> {
+    const extension = MIME_EXTENSIONS[input.mimeType];
+    if (!extension || !input.mimeType.startsWith("image/")) {
+      throw new BadRequestError("AI media provider returned an unsupported image format.");
+    }
+    if (input.bytes.length < 1 || input.bytes.length > MAX_IMAGE_BYTES) {
+      throw new BadRequestError("Generated image must be between 1 byte and 10MB.");
+    }
+
+    const config = this.getConfig();
+    const storageKey = "products/ai-generated/" + crypto.randomUUID() + "." + extension;
+    const url =
+      config.storageBaseUrl +
+      "/object/" +
+      encodeURIComponent(config.bucket) +
+      "/" +
+      encodeStoragePath(storageKey);
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        ...this.headers(config),
+        "Content-Type": input.mimeType,
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "x-upsert": "false",
+      },
+      body: input.bytes,
+      signal: AbortSignal.timeout(20000),
+    });
+
+    if (!response.ok) {
+      throw new ServiceUnavailableError(
+        "Could not save the generated image to Supabase Storage (HTTP " +
+          response.status +
+          "). Check the product-media bucket and backend service-role credentials."
+      );
+    }
+
+    return {
+      storageKey,
+      publicUrl: this.getPublicUrl(storageKey),
+      fileSizeBytes: input.bytes.length,
+      mimeType: input.mimeType,
+    };
+  }
+
   async createSignedUploadUrl(input: {
     mimeType: string;
     fileSizeBytes: number;
