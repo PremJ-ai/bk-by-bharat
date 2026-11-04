@@ -42,7 +42,7 @@ Current events wired:
 The purchase event is deliberately not sent when an order is merely created or payment proof is submitted. The current store uses manual payment verification; the verified order state is the conversion condition. GA4's recommended ecommerce events and item parameters are documented by Google:
 https://developers.google.com/analytics/devguides/collection/ga4/ecommerce
 
-No customer name, phone number, email, delivery address, payment screenshot URL, guest order token or admin identity is sent to GA4.
+No customer name, phone number, email, delivery address, payment screenshot URL, guest order token, free-form search text or admin identity is sent to GA4. Search usage is counted without transmitting the raw search term.
 
 ## 2. GA4: admin reporting
 
