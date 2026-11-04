@@ -40,9 +40,9 @@ export class MediaService {
         "AI image generation is not configured. Set HF_TOKEN and Supabase Storage credentials in the backend environment."
       );
     }
-    if (process.env.VERCEL === "1" && !this.provider.isLiveGenerative()) {
+    if (!this.provider.isLiveGenerative()) {
       throw new ServiceUnavailableError(
-        "Production AI generation requires a live inference provider. Configure HF_TOKEN on the backend."
+        "No live AI image provider is active. Configure HF_TOKEN and Supabase Storage on the backend before generating media."
       );
     }
 
