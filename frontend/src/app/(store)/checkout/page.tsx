@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useCart } from "@/context/CartContext";
@@ -11,6 +11,7 @@ import { SiteFooter } from "@/components/layout/SiteFooter";
 import { submitGuestCheckout } from "@/lib/api/commerce";
 import { getStorefrontProductBySlug } from "@/lib/api/catalog";
 import { ApiError } from "@/lib/api/client";
+import { trackGA4Event, toGA4Item } from "@/lib/analytics/ga4";
 import {
   ShieldCheck,
   ShoppingBag,
@@ -25,6 +26,30 @@ import {
 export default function GuestCheckoutPage() {
   const router = useRouter();
   const { items, subtotalPaise, clearCart } = useCart();
+  const lastCheckoutKeyRef = useRef<string>("");
+
+  useEffect(() => {
+    if (items.length === 0) return;
+    const checkoutKey = items
+      .map((item) => `${item.productId}:${item.size}:${item.quantity}`)
+      .sort()
+      .join("|");
+    if (checkoutKey === lastCheckoutKeyRef.current) return;
+    lastCheckoutKeyRef.current = checkoutKey;
+
+    trackGA4Event("begin_checkout", {
+      currency: "INR",
+      value: subtotalPaise / 100,
+      items: items.map((item) => toGA4Item({
+        productId: item.productId,
+        name: item.name,
+        material: item.material,
+        size: item.size,
+        pricePaise: item.pricePaise,
+        quantity: item.quantity,
+      })),
+    });
+  }, [items, subtotalPaise]);
 
   // Form Fields
   const [fullName, setFullName] = useState("");
