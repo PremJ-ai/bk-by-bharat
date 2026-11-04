@@ -90,11 +90,12 @@ The existing media-generation extension points are:
 - Frontend request wrapper: `frontend/src/lib/api/media.ts` function `generateAiMedia()`
 - Existing admin upload/preview manager: `frontend/src/components/admin/ProductMediaManager.tsx`
 
-Important current-state notes:
-- `media.provider.ts` currently selects between the OpenAI image provider (when `OPENAI_API_KEY` exists) and the local deterministic preset provider. The local preset is curated photography, not generative AI.
-- `media.service.ts` currently disables generation on Vercel. Therefore, merely adding `HF_TOKEN` to Vercel will not make Hugging Face generation work.
-- The Hugging Face provider has not yet been implemented or selected by the provider factory.
-- The current product upload flow stores files in Supabase Storage through signed uploads, which is the persistence path the Hugging Face provider should use for generated image bytes before creating the `MediaAsset` record.
+Current state:
+- `HuggingFaceMediaGenerationProvider` is selected when `HF_TOKEN` is configured.
+- The provider currently implements text-to-image through the `hf-inference` Inference Provider route.
+- If no live Hugging Face token is configured, the admin Generate action fails with a setup message; curated Unsplash presets are not saved as AI output.
+- Generated image bytes are written server-side to Supabase Storage before a `MediaAsset` record is created.
+- The product editor appends the result as an image draft; saving/publishing the product remains a separate admin action.
 
 The Hugging Face token must be a fine-grained token with the “Make calls to Inference Providers” permission and must be stored only in the backend Vercel project. Official documentation:
 https://huggingface.co/docs/inference-providers/index
