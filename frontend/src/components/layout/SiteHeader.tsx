@@ -131,10 +131,8 @@ export function SiteHeader() {
     event.preventDefault();
     const query = searchTerm.trim();
     if (!query) return;
-    // Avoid sending likely personal identifiers typed into the storefront search field.
-    if (!query.includes("@") && !/\d{8,}/.test(query)) {
-      trackGA4Event("search", { search_term: query });
-    }
+    // Record search usage without forwarding free-form customer-entered text to GA4.
+    trackGA4Event("search", { search_method: "header_search" });
     setSearchResults([]);
     router.push(`/collections/all?search=${encodeURIComponent(query)}`);
   };
