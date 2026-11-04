@@ -96,19 +96,36 @@ Important current-state notes:
 - The Hugging Face provider has not yet been implemented or selected by the provider factory.
 - The current product upload flow stores files in Supabase Storage through signed uploads, which is the persistence path the Hugging Face provider should use for generated image bytes before creating the `MediaAsset` record.
 
-The Hugging Face token should be a fine-grained token with the “Make calls to Inference Providers” permission and must be kept in the backend project only. Official documentation:
+The Hugging Face token must be a fine-grained token with the “Make calls to Inference Providers” permission and must be stored only in the backend Vercel project. Official documentation:
 https://huggingface.co/docs/inference-providers/index
 
-A future Hugging Face implementation should:
-1. Add a `HuggingFaceMediaGenerationProvider` implementing the existing `ImageGenerationProvider` interface.
-2. Read `HF_TOKEN` only in the backend, plus a configured model/provider identifier.
-3. Call a model/provider that supports text-to-image; test model availability and billing before selecting it.
-4. Persist returned image bytes into the existing Supabase product-media bucket.
-5. Save the durable public Storage URL, storage key, prompt and provenance to `MediaAsset`.
-6. Keep generation ADMIN-only and expose progress/failure state through the existing image-generation job model.
-7. Remove the Vercel generation restriction only after durable Storage persistence and provider timeout/size handling are implemented.
+### Implemented text-to-image connection
 
-The `HF_TOKEN` line in `backend/.env.example` is currently a configuration placeholder; it is not read by the existing provider yet.
+The first Hugging Face text-to-image path is now implemented in the feature branch:
+
+- Provider implementation and selection: `backend/src/modules/media/media.provider.ts` (`HuggingFaceMediaGenerationProvider`)
+- Durable generated-image storage: `backend/src/modules/storage/supabase-public-media-storage.ts` (`storeGeneratedImage()`)
+- Generation orchestration and job/media-asset persistence: `backend/src/modules/media/media.service.ts`
+- Admin-only endpoint: `POST /api/v1/admin/media/generate` in `backend/src/modules/media/media.routes.ts`
+- Browser request wrapper: `frontend/src/lib/api/media.ts` (`generateAiMedia()`)
+- Admin UI: `frontend/src/components/admin/ProductMediaManager.tsx`
+- Product creation and editing surfaces: `frontend/src/app/admin/products/new/page.tsx` and `frontend/src/app/admin/products/[id]/edit/page.tsx`
+
+The button appears inside the Product Gallery section as “AI image studio · Hugging Face”. It uses the product name, fabric and category, accepts optional creative direction, calls the protected backend route, stores the generated image in Supabase and adds it to the current product draft. The admin must still save the product and review the image before publishing.
+
+Current backend defaults:
+- `HF_IMAGE_PROVIDER=hf-inference`
+- `HF_IMAGE_MODEL=stabilityai/stable-diffusion-3-medium-diffusers`
+
+These values can be overridden in the backend environment. The selected model must be available to the account's Inference Providers entitlement. The text-to-image adapter is implemented; video generation and reference-image-to-image editing are not part of this first increment.
+
+The provider refuses to report success unless the returned image bytes are saved to the persistent Supabase media bucket. The live Hugging Face token is never returned to the browser.
+
+Official Hugging Face task documentation:
+- Text-to-image: https://huggingface.co/docs/inference-providers/tasks/text-to-image
+- Inference Providers: https://huggingface.co/docs/inference-providers/index
+
+The `HF_TOKEN` line in `backend/.env.example` is a placeholder for the secret value; the application reads `process.env.HF_TOKEN` in the backend provider.
 
 ## 4. Verification checklist
 
