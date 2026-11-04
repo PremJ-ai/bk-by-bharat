@@ -9,6 +9,7 @@ import { useCart } from "@/context/CartContext";
 import { getStorefrontProducts } from "@/lib/api/catalog";
 import type { ProductViewModel } from "@/components/product/product.types";
 import { formatINR } from "@/components/product/ProductCard";
+import { trackGA4Event } from "@/lib/analytics/ga4";
 import {
   gsap,
   isReducedMotion,
@@ -130,6 +131,10 @@ export function SiteHeader() {
     event.preventDefault();
     const query = searchTerm.trim();
     if (!query) return;
+    // Avoid sending likely personal identifiers typed into the storefront search field.
+    if (!query.includes("@") && !/\d{8,}/.test(query)) {
+      trackGA4Event("search", { search_term: query });
+    }
     setSearchResults([]);
     router.push(`/collections/all?search=${encodeURIComponent(query)}`);
   };
