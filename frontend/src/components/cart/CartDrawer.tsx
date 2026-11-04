@@ -6,6 +6,7 @@ import { useCart } from "@/context/CartContext";
 import { formatINR } from "@/components/product/ProductCard";
 import { X, Plus, Minus, Trash2, ShoppingBag, ArrowRight } from "lucide-react";
 import { gsap, isReducedMotion, MOTION_TOKENS } from "@/lib/motion/gsap";
+import { trackGA4Event, toGA4Item } from "@/lib/analytics/ga4";
 
 export function CartDrawer() {
   const { items, isOpen, closeCart, removeItem, updateQuantity, subtotalPaise, itemCount } = useCart();
@@ -116,6 +117,23 @@ export function CartDrawer() {
       timeline.kill();
     };
   }, [isOpen, isMounted]);
+
+  // GA4 cart view: fire once each time the drawer is opened.
+  useEffect(() => {
+    if (!isOpen || items.length === 0) return;
+    trackGA4Event("view_cart", {
+      currency: "INR",
+      value: subtotalPaise / 100,
+      items: items.map((item) => toGA4Item({
+        productId: item.productId,
+        name: item.name,
+        material: item.material,
+        size: item.size,
+        pricePaise: item.pricePaise,
+        quantity: item.quantity,
+      })),
+    });
+  }, [isOpen]);
 
   // Close on Escape key
   useEffect(() => {
