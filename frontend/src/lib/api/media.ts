@@ -42,6 +42,9 @@ export async function generateAiMedia(data: {
   material: string;
   categoryName: string;
   productId?: string;
+  prompt?: string;
+  width?: number;
+  height?: number;
 }): Promise<MediaAssetDto> {
   const res = await apiClient<MediaAssetDto>("/admin/media/generate", {
     method: "POST",
