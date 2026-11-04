@@ -13,6 +13,7 @@ import { SectionReveal } from "@/components/motion/SectionReveal";
 import { StaggeredGrid } from "@/components/motion/StaggeredGrid";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { ProductListAnalytics } from "@/components/analytics/ProductListAnalytics";
 
 export const dynamic = "force-dynamic";
 
@@ -151,6 +152,7 @@ export default async function StorefrontHomePage() {
             </div>
             <div className="text-right"><span className="block text-xs uppercase tracking-caps text-muted">{newest.total} available pieces</span><span className="mt-1 block text-[10px] text-muted/80">Product image first · model film on hover when available</span></div>
           </SectionReveal>
+          <ProductListAnalytics products={newest.items} listId="home_new_arrivals" listName="Homepage New Arrivals" />
           <ProductGrid products={newest.items} unavailable={newestError} emptyMessage="New arrivals will appear here when available." />
         </section>
 
