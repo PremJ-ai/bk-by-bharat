@@ -78,7 +78,7 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
       currency: order.currency || "INR",
       value: order.totalPaise / 100,
       items: order.items.map((item) => toGA4Item({
-        productId: item.id,
+        id: item.sku,
         name: item.productName,
         material: item.material,
         size: item.size,
