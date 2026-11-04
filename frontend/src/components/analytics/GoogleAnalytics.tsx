@@ -21,8 +21,8 @@ export function GoogleAnalytics() {
     // Guest order routes embed an opaque tracking token in the pathname.
     // Never forward that token or arbitrary query strings to an analytics provider.
     const safePath = pathname
-      .replace(/\\/orders\\/confirmation\\/[^/]+(?:\\/.*)?$/, "/orders/confirmation")
-      .replace(/\\/order-status\\/[^/]+(?:\\/.*)?$/, "/order-status");
+      .replace(/\/orders\/confirmation\/[^/]+(?:\/.*)?$/, "/orders/confirmation")
+      .replace(/\/order-status\/[^/]+(?:\/.*)?$/, "/order-status");
 
     window.gtag("event", "page_view", {
       page_path: safePath,
