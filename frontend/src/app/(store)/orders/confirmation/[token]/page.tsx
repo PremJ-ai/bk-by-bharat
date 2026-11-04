@@ -76,7 +76,9 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
     trackGA4Event("purchase", {
       transaction_id: transactionId,
       currency: order.currency || "INR",
-      value: order.totalPaise / 100,
+      value: Math.max(0, order.subtotalPaise - order.discountPaise) / 100,
+      shipping: order.shippingPaise / 100,
+      tax: order.taxPaise / 100,
       items: order.items.map((item) => toGA4Item({
         id: item.sku,
         name: item.productName,
