@@ -307,8 +307,7 @@ export function getMediaGenerationProvider(): ImageGenerationProvider {
   if (process.env.HF_TOKEN) {
     return new HuggingFaceMediaGenerationProvider();
   }
-  if (process.env.OPENAI_API_KEY) {
-    return new OpenAIMediaGenerationProvider();
-  }
+  // Keep the curated preset adapter for non-generative preview workflows only.
+  // MediaService rejects it for the AI-generation endpoint.
   return new LocalAtelierMediaProvider();
 }
