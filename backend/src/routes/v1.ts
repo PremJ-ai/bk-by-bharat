@@ -2,6 +2,7 @@ import { Router } from "express";
 import { adminAuthRouter } from "../modules/admin-auth/admin-auth.routes.js";
 import { publicCatalogRouter, adminCatalogRouter } from "../modules/catalog/catalog.routes.js";
 import { adminMediaRouter } from "../modules/media/media.routes.js";
+import { adminAnalyticsRouter } from "../modules/analytics/analytics.routes.js";
 import {
   publicOrdersRouter,
   adminOrdersRouter,
@@ -45,6 +46,9 @@ v1Router.use("/admin-auth", adminAuthRouter);
 
 // Public storefront catalog endpoints (/api/v1/products, /api/v1/categories)
 v1Router.use("/", publicCatalogRouter);
+
+// Admin-only Google Analytics reporting endpoints (/api/v1/admin/analytics)
+v1Router.use("/admin/analytics", adminAnalyticsRouter);
 
 // Admin catalog management endpoints (/api/v1/admin/products)
 v1Router.use("/admin/products", adminCatalogRouter);
