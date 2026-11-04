@@ -16,6 +16,9 @@ const generateMediaSchema = z.object({
   material: z.string().min(2),
   categoryName: z.string().min(2),
   productId: z.string().optional(),
+  prompt: z.string().trim().min(10).max(3000).optional(),
+  width: z.number().int().min(768).max(1280).optional(),
+  height: z.number().int().min(768).max(1280).optional(),
 });
 
 const createMediaUploadUrlSchema = z.object({
