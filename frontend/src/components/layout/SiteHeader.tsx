@@ -9,6 +9,7 @@ import { useCart } from "@/context/CartContext";
 import { getStorefrontProducts } from "@/lib/api/catalog";
 import type { ProductViewModel } from "@/components/product/product.types";
 import { formatINR } from "@/components/product/ProductCard";
+import { trackGA4Event } from "@/lib/analytics/ga4";
 import {
   gsap,
   isReducedMotion,
@@ -130,6 +131,8 @@ export function SiteHeader() {
     event.preventDefault();
     const query = searchTerm.trim();
     if (!query) return;
+    // Record search usage without forwarding free-form customer-entered text to GA4.
+    trackGA4Event("search", { search_method: "header_search" });
     setSearchResults([]);
     router.push(`/collections/all?search=${encodeURIComponent(query)}`);
   };

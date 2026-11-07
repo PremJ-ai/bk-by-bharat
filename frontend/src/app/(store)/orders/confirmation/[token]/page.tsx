@@ -6,6 +6,7 @@ import { AnnouncementBar } from "@/components/layout/AnnouncementBar";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { formatINR } from "@/components/product/ProductCard";
+import { trackGA4Event, toGA4Item } from "@/lib/analytics/ga4";
 import {
   getGuestOrderStatus,
   createPaymentProofUploadUrl,
@@ -59,6 +60,35 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
   const [copiedUpi, setCopiedUpi] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!order || !["PAID", "PROCESSING", "SHIPPED", "DELIVERED"].includes(order.status)) return;
+
+    const transactionId = order.orderNumber;
+    const storageKey = `ga4_purchase_${transactionId}`;
+    try {
+      if (window.sessionStorage.getItem(storageKey)) return;
+      window.sessionStorage.setItem(storageKey, "sent");
+    } catch {
+      // If storage is unavailable, still send the confirmed purchase event once for this render.
+    }
+
+    trackGA4Event("purchase", {
+      transaction_id: transactionId,
+      currency: order.currency || "INR",
+      value: Math.max(0, order.subtotalPaise - order.discountPaise) / 100,
+      shipping: order.shippingPaise / 100,
+      tax: order.taxPaise / 100,
+      items: order.items.map((item) => toGA4Item({
+        id: item.sku,
+        name: item.productName,
+        material: item.material,
+        size: item.size,
+        pricePaise: item.unitPricePaise,
+        quantity: item.quantity,
+      })),
+    });
+  }, [order?.orderNumber, order?.status]);
 
   const fetchOrder = () => {
     getGuestOrderStatus(token)

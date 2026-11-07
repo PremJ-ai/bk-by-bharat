@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { trackGA4Event, toGA4Item } from "@/lib/analytics/ga4";
 
 export interface CartItem {
   id: string; // Composite unique key: `${productId}-${size}-${color || 'default'}`
@@ -68,6 +69,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const addItem = (item: Omit<CartItem, "id">) => {
     const compositeId = `${item.productId}-${item.size}-${item.color || "std"}`;
+    trackGA4Event("add_to_cart", {
+      currency: "INR",
+      value: (item.pricePaise * item.quantity) / 100,
+      items: [toGA4Item({
+        productId: item.productId,
+        name: item.name,
+        material: item.material,
+        size: item.size,
+        pricePaise: item.pricePaise,
+        quantity: item.quantity,
+      })],
+    });
     setItems((prev) => {
       const existing = prev.find((i) => i.id === compositeId);
       if (existing) {
@@ -81,10 +94,41 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   };
 
   const removeItem = (id: string) => {
+    const removed = items.find((item) => item.id === id);
+    if (removed) {
+      trackGA4Event("remove_from_cart", {
+        currency: "INR",
+        value: (removed.pricePaise * removed.quantity) / 100,
+        items: [toGA4Item({
+          productId: removed.productId,
+          name: removed.name,
+          material: removed.material,
+          size: removed.size,
+          pricePaise: removed.pricePaise,
+          quantity: removed.quantity,
+        })],
+      });
+    }
     setItems((prev) => prev.filter((i) => i.id !== id));
   };
 
   const updateQuantity = (id: string, delta: number) => {
+    const changed = items.find((item) => item.id === id);
+    if (changed && delta !== 0) {
+      const eventItem = {
+        productId: changed.productId,
+        name: changed.name,
+        material: changed.material,
+        size: changed.size,
+        pricePaise: changed.pricePaise,
+        quantity: Math.abs(delta),
+      };
+      trackGA4Event(delta > 0 ? "add_to_cart" : "remove_from_cart", {
+        currency: "INR",
+        value: (changed.pricePaise * Math.abs(delta)) / 100,
+        items: [toGA4Item(eventItem)],
+      });
+    }
     setItems((prev) =>
       prev
         .map((i) => {

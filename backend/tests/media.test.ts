@@ -89,29 +89,37 @@ describe("Milestone 5: Media Service and Admin Media Endpoints", () => {
     expect(res.status).toBe(401);
   });
 
-  it("generates an AI media asset successfully for an authenticated admin", async () => {
-    const res = await request(app)
-      .post("/api/v1/admin/media/generate")
-      .set("Cookie", adminCookie)
-      .send({
-        productName: "TestMedia Raw Silk Overshirt",
-        material: "Raw Silk",
-        categoryName: "shirts",
-        productId: testProductId,
+  it("does not label curated preset photography as AI-generated when no live provider is configured", async () => {
+    const previousToken = process.env.HF_TOKEN;
+    const previousOpenAiKey = process.env.OPENAI_API_KEY;
+    delete process.env.HF_TOKEN;
+    delete process.env.OPENAI_API_KEY;
+
+    try {
+      const res = await request(app)
+        .post("/api/v1/admin/media/generate")
+        .set("Cookie", adminCookie)
+        .send({
+          productName: "TestMedia Raw Silk Overshirt",
+          material: "Raw Silk",
+          categoryName: "shirts",
+          productId: testProductId,
+        });
+
+      expect(res.status).toBe(503);
+      expect(res.body.error.message).toContain("No live AI image provider is active");
+
+      // No completed AI job or stock/curated photography should be persisted.
+      const job = await prisma.imageGenerationJob.findFirst({
+        where: { productId: testProductId },
       });
-
-    expect(res.status).toBe(201);
-    expect(res.body.data).toBeDefined();
-    expect(res.body.data.source).toBe("AI_GENERATED");
-    expect(res.body.data.status).toBe("READY");
-    expect(res.body.data.url).toMatch(/^https?:\/\//);
-
-    // Verify job in database
-    const job = await prisma.imageGenerationJob.findFirst({
-      where: { productId: testProductId },
-    });
-    expect(job).toBeDefined();
-    expect(job?.status).toBe("COMPLETED");
+      expect(job).toBeNull();
+    } finally {
+      if (previousToken === undefined) delete process.env.HF_TOKEN;
+      else process.env.HF_TOKEN = previousToken;
+      if (previousOpenAiKey === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = previousOpenAiKey;
+    }
   });
 
   it("rejects uploads with unsupported mime types", async () => {

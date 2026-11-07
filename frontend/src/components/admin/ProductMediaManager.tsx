@@ -1,9 +1,10 @@
 "use client";
 
 import { useRef, useState, type ChangeEvent } from "react";
-import { ArrowDown, ArrowUp, ImagePlus, Replace, Star, Trash2, Video } from "lucide-react";
+import { ArrowDown, ArrowUp, ImagePlus, Replace, Star, Trash2, Video, Sparkles, Loader2 } from "lucide-react";
 import {
   createProductMediaUploadUrl,
+  generateAiMedia,
   uploadMediaAsset,
   type AdminProductMediaItem,
   type ProductMediaMimeType,
@@ -66,6 +67,8 @@ interface ProductMediaManagerProps {
   onChange: (items: AdminProductMediaItem[]) => void;
   productName: string;
   material: string;
+  categoryName?: string;
+  productId?: string;
 }
 
 export function ProductMediaManager({
@@ -73,12 +76,67 @@ export function ProductMediaManager({
   onChange,
   productName,
   material,
+  categoryName = "Menswear",
+  productId,
 }: ProductMediaManagerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const replacementIndexRef = useRef<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const generateAiImage = async () => {
+    if (productName.trim().length < 2 || material.trim().length < 2) {
+      setAiError("Enter the product name and fabric material before generating an image.");
+      return;
+    }
+    if (items.filter((item) => item.mediaType === "IMAGE").length >= MAX_IMAGES) {
+      setAiError("This product already has the maximum of four images. Remove or replace an image first.");
+      return;
+    }
+
+    setAiGenerating(true);
+    setAiError(null);
+    try {
+      const generated = await generateAiMedia({
+        productName: productName.trim(),
+        material: material.trim(),
+        categoryName,
+        productId,
+        prompt: aiPrompt.trim() || undefined,
+        width: 1024,
+        height: 1280,
+      });
+
+      const newItem: AdminProductMediaItem = {
+        mediaAssetId: generated.id,
+        url: generated.url,
+        altText: `${productName.trim()} in ${material.trim()}`,
+        caption: "AI-generated image draft · review before publishing",
+        posterUrl: null,
+        mediaType: "IMAGE",
+        mimeType: generated.mimeType as ProductMediaMimeType,
+        fileSizeBytes: generated.fileSizeBytes,
+        isPrimary: !items.some((item) => item.mediaType === "IMAGE" && item.isPrimary),
+        sortOrder: items.length,
+        source: "AI_GENERATED",
+        storageKey: generated.storageKey,
+      };
+
+      onChange([...items, newItem]);
+    } catch (generationError) {
+      setAiError(
+        generationError instanceof Error
+          ? generationError.message
+          : "Hugging Face image generation failed. Please try again."
+      );
+    } finally {
+      setAiGenerating(false);
+    }
+  };
 
   const uploadFiles = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.currentTarget.files ?? []);
@@ -231,6 +289,48 @@ export function ProductMediaManager({
           <ImagePlus className="h-4 w-4" />
           {uploading ? `Uploading ${uploadProgress}%` : "Add media"}
         </button>
+      </div>
+      <div className="border border-[#e7d7f4] bg-[#fbf7ff] p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="flex items-center gap-2 text-xs font-semibold text-[#533276]">
+              <Sparkles className="h-4 w-4" />
+              AI image studio · Hugging Face
+            </h3>
+            <p className="mt-1 text-[10px] leading-relaxed text-[#79668e]">
+              Generate a product-image draft from the garment details. The image is saved to Supabase and added below for review.
+            </p>
+          </div>
+          <span className="rounded-full border border-[#e7d7f4] bg-white px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-[#76538f]">
+            Text to image
+          </span>
+        </div>
+        <label className="block space-y-1 text-[10px] font-semibold uppercase tracking-wide text-[#79668e]">
+          Optional creative direction
+          <textarea
+            value={aiPrompt}
+            onChange={(event) => setAiPrompt(event.target.value)}
+            maxLength={3000}
+            rows={3}
+            placeholder="e.g. Full-body menswear editorial, model wearing this exact garment, warm sandstone studio, natural soft light. Keep the fabric, colour and cut accurate."
+            className="w-full resize-y border border-[#e7d7f4] bg-white p-3 text-xs font-normal normal-case leading-relaxed text-slate-800 outline-none focus:border-[#a27ac1]"
+          />
+        </label>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[9px] text-[#79668e]">
+            Uses product name, category and material as prompt context · 1024 × 1280
+          </p>
+          <button
+            type="button"
+            onClick={generateAiImage}
+            disabled={aiGenerating || uploading || productName.trim().length < 2 || material.trim().length < 2 || items.filter((item) => item.mediaType === "IMAGE").length >= MAX_IMAGES}
+            className="inline-flex min-h-9 items-center gap-2 rounded-md bg-[#65418a] px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-white transition hover:bg-[#50316e] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {aiGenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            {aiGenerating ? "Generating image…" : "Generate image"}
+          </button>
+        </div>
+        {aiError && <p role="alert" className="text-xs text-rose-700">{aiError}</p>}
       </div>
       <input ref={inputRef} type="file" className="hidden" onChange={uploadFiles} />
       {uploading && (

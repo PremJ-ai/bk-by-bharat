@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiClient } from "@/lib/api/client";
 import type { AdminUserDTO } from "@/lib/api/types";
+import { AnalyticsOverviewPanel } from "@/components/admin/AnalyticsOverviewPanel";
 import {
   Activity,
   ArrowUpRight,
@@ -302,25 +303,7 @@ export default function AdminOverviewPage() {
           </div>
         </div>
 
-        <div className="admin-panel">
-          <div className="admin-icon-tile admin-icon-tile--pink">
-            <Activity className="h-5 w-5" />
-          </div>
-          <h2 className="admin-panel-title mt-4">Store analytics</h2>
-          <p className="admin-panel-caption mt-1">
-            Analytics integration is not connected yet.
-          </p>
-          <div className="admin-empty-analytics mt-4">
-            Sales trends, visitor activity and conversion metrics will appear here after the
-            analytics integration is configured. No sample figures are shown as live store data.
-          </div>
-          <Link
-            href="/admin/products"
-            className="mt-4 inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.1em] text-[#d52f7a] transition-colors hover:text-[#a91f5e]"
-          >
-            Continue to catalogue <ArrowUpRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
+        <AnalyticsOverviewPanel />
       </section>
     </div>
   );

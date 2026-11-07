@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, use, useEffect } from "react";
+import { useState, use, useEffect, useRef } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AnnouncementBar } from "@/components/layout/AnnouncementBar";
@@ -25,6 +25,7 @@ import {
 import { ProductGallery } from "@/components/media/ProductGallery";
 import { EditorialCropReveal } from "@/components/motion/EditorialCropReveal";
 import { ParallaxFrame } from "@/components/motion/ParallaxFrame";
+import { trackGA4Event, toGA4Item } from "@/lib/analytics/ga4";
 
 interface ProductPageProps {
   params: Promise<{ slug: string }>;
@@ -39,6 +40,23 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
   const [retryCount, setRetryCount] = useState(0);
 
   const { addItem } = useCart();
+  const lastViewedProductRef = useRef<string>("");
+
+  useEffect(() => {
+    if (!product || lastViewedProductRef.current === product.id) return;
+    lastViewedProductRef.current = product.id;
+    trackGA4Event("view_item", {
+      currency: "INR",
+      value: product.pricePaise / 100,
+      items: [toGA4Item({
+        id: product.id,
+        name: product.name,
+        category: product.category,
+        material: product.material,
+        pricePaise: product.pricePaise,
+      })],
+    });
+  }, [product]);
 
   // State
   const [selectedSize, setSelectedSize] = useState("");

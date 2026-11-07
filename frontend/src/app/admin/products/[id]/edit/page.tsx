@@ -430,6 +430,8 @@ export default function EditProductPage({ params }: EditProductPageProps) {
               onChange={setMediaItems}
               productName={name}
               material={material}
+              categoryName={category}
+              productId={productId}
             />
 
             {/* Inventory table */}

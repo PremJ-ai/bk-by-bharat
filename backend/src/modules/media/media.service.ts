@@ -31,10 +31,18 @@ export class MediaService {
     categoryName: string;
     productId?: string;
     idempotencyKey?: string;
+    prompt?: string;
+    width?: number;
+    height?: number;
   }) {
-    if (process.env.VERCEL === "1") {
+    if (!this.provider.isConfigured()) {
       throw new ServiceUnavailableError(
-        "Image generation is disabled until persistent media storage is configured for this deployment."
+        "AI image generation is not configured. Set HF_TOKEN and Supabase Storage credentials in the backend environment."
+      );
+    }
+    if (!this.provider.isLiveGenerative()) {
+      throw new ServiceUnavailableError(
+        "No live AI image provider is active. Configure HF_TOKEN and Supabase Storage on the backend before generating media."
       );
     }
 
@@ -45,7 +53,7 @@ export class MediaService {
     const job = await prisma.imageGenerationJob.create({
       data: {
         productId: productId || null,
-        prompt: `Atelier lookbook visual for ${productName} (${material})`,
+        prompt: options.prompt?.trim() || `Atelier lookbook visual for ${productName} (${material})`,
         status: "PROCESSING",
         idempotencyKey,
         provider: this.provider.name,
@@ -58,6 +66,9 @@ export class MediaService {
         productName,
         material,
         category: categoryName,
+        prompt: options.prompt,
+        width: options.width,
+        height: options.height,
       });
 
       // 3. Persist Media Asset

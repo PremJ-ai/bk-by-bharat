@@ -7,6 +7,7 @@ import { Draggable, gsap, isReducedMotion, registerGsapPlugins } from "@/lib/mot
 import type { ProductViewModel } from "./product.types";
 import { CheckCircle2, AlertCircle } from "lucide-react";
 import { ProductMedia } from "@/components/media/ProductMedia";
+import { trackGA4Event, toGA4Item } from "@/lib/analytics/ga4";
 
 interface ProductCardProps {
   product: ProductViewModel;
@@ -118,7 +119,20 @@ export function ProductCard({ product, priority }: ProductCardProps) {
               {product.material}
             </span>
             <h3 className="font-display text-lg text-ink font-normal leading-snug group-hover:text-gold transition-colors">
-              <Link href={`/products/${product.slug}`} className="focus:outline-none focus:underline">
+              <Link
+                href={`/products/${product.slug}`}
+                onClick={() => trackGA4Event("select_item", {
+                  item_list_name: "Storefront product grid",
+                  items: [toGA4Item({
+                    id: product.id,
+                    name: product.name,
+                    category: product.category,
+                    material: product.material,
+                    pricePaise: product.pricePaise,
+                  })],
+                })}
+                className="focus:outline-none focus:underline"
+              >
                 {product.name}
               </Link>
             </h3>
