@@ -17,8 +17,13 @@ interface CampaignHeroProps {
   product?: ProductViewModel;
 }
 
+const FALLBACK_HERO_IMAGE =
+  "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=2200&q=90";
+
 export function CampaignHero({ product }: CampaignHeroProps) {
   const heroRef = useRef<HTMLElement>(null);
+  const heroVideoUrl = product?.videoUrl || process.env.NEXT_PUBLIC_HERO_VIDEO_URL || null;
+  const heroPoster = product?.videoPosterUrl || product?.imageUrl || FALLBACK_HERO_IMAGE;
 
   useGSAP(
     () => {
@@ -61,26 +66,21 @@ export function CampaignHero({ product }: CampaignHeroProps) {
       className="group relative isolate flex min-h-[calc(100svh-32px)] items-end overflow-hidden bg-[#302219] text-[#fbf6ee]"
     >
       <div className="absolute inset-0 bg-[#302219]">
-        {product?.imageUrl ? (
-          <img
-            data-hero-image
-            src={product.imageUrl}
-            alt={product.imageAlt || product.name}
-            fetchPriority="high"
-            loading="eager"
-            decoding="async"
-            className="absolute inset-0 h-full w-full object-cover object-[64%_center] motion-safe:transition-transform motion-safe:duration-[1800ms] group-hover:scale-[1.015]"
-          />
-        ) : (
-          <div
-            aria-hidden="true"
-            className="absolute inset-0 bg-[radial-gradient(ellipse_at_72%_38%,#8b7258_0%,#594333_38%,#302219_78%)]"
-          />
-        )}
-        {product?.videoUrl && (
+        <img
+          data-hero-image
+          src={heroPoster}
+          alt=""
+          aria-hidden="true"
+          fetchPriority="high"
+          loading="eager"
+          decoding="async"
+          className="absolute inset-0 h-full w-full object-cover object-[64%_center] motion-safe:transition-transform motion-safe:duration-[1800ms] group-hover:scale-[1.015]"
+        />
+        {heroVideoUrl && (
           <video
-            src={product.videoUrl}
-            poster={product.videoPosterUrl || product.imageUrl}
+            key={heroVideoUrl}
+            src={heroVideoUrl}
+            poster={heroPoster}
             muted
             autoPlay
             loop
