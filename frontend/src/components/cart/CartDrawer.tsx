@@ -351,7 +351,7 @@ export function CartDrawer() {
                   onClick={closeCart}
                   className="w-full bg-navy text-canvas hover:bg-gold hover:text-navy py-3 px-4 text-xs uppercase tracking-caps font-semibold flex items-center justify-center space-x-2 transition-all duration-200 shadow-sm"
                 >
-                  <span>Proceed to Guest Checkout</span>
+                  <span>Order Now</span>
                   <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
