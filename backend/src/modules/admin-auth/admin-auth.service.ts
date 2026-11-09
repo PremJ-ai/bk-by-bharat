@@ -46,7 +46,7 @@ export class AdminAuthService {
 
   async bootstrapFirstAdmin(username: string, password: string): Promise<SafeAdminUserDTO> {
     const normalizedEmail = username.toLowerCase().trim();
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(normalizedEmail)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       throw new ValidationError("Administrator login must use a valid email address.");
     }
     if (password.length < 14 || password.length > 128) {
@@ -159,7 +159,7 @@ export class AdminAuthService {
     }
 
     const email = input.email.toLowerCase().trim();
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       throw new ValidationError("Enter a valid administrator email address.");
     }
 
