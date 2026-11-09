@@ -266,9 +266,28 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
       order.paymentDetails?.upiDeepLink || ""
     )}`;
 
-  const whatsappInquiryUrl = `https://wa.me/?text=${encodeURIComponent(
-    `Hello Bharat Atelier, inquiring regarding my order ${order.orderNumber}.`
-  )}`;
+  const storeWhatsAppDigits = order.paymentDetails?.storeWhatsAppNumber?.replace(/\D/g, "") || "";
+  const whatsappOrderText = [
+    "NEW WEBSITE ORDER — BK BY BHARAT",
+    `Order: ${order.orderNumber}`,
+    `Customer: ${order.customerName}`,
+    `Customer WhatsApp: ${order.whatsappNumber}`,
+    "Delivery address:",
+    order.shippingAddress.line1,
+    order.shippingAddress.line2 || "",
+    `${order.shippingAddress.city}, ${order.shippingAddress.state} ${order.shippingAddress.postalCode}, ${order.shippingAddress.country}`,
+    "Items:",
+    ...order.items.flatMap((item, index) => [
+      `${index + 1}. ${item.productName} | Size: ${item.size} | Colour: ${item.color} | Qty: ${item.quantity}`,
+      `SKU: ${item.sku} | Fabric: ${item.material} | Unit: ${formatINR(item.unitPricePaise)} | Line: ${formatINR(item.lineTotalPaise)}`,
+      item.imageUrl ? `Product image: ${item.imageUrl}` : "",
+    ]),
+    `Items subtotal: ${formatINR(order.subtotalPaise)}`,
+    "Please confirm availability and share the final invoice / UPI QR payment instructions.",
+  ].filter(Boolean).join("\n");
+  const whatsappOrderUrl = storeWhatsAppDigits
+    ? `https://wa.me/${storeWhatsAppDigits}?text=${encodeURIComponent(whatsappOrderText)}`
+    : null;
 
   return (
     <div className="min-h-screen flex flex-col bg-canvas text-ink">
@@ -360,6 +379,31 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
               <span className="font-semibold text-ink">{order.status}</span>
             </span>
           </div>
+
+          {isAwaitingReview && (
+            <div className="mx-auto max-w-xl space-y-2 pt-3">
+              {whatsappOrderUrl ? (
+                <a
+                  href={whatsappOrderUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 bg-[#16845b] px-5 py-3 text-xs font-semibold uppercase tracking-caps text-white transition hover:bg-[#116b49]"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  Send order details on WhatsApp
+                </a>
+              ) : (
+                <p className="text-xs text-muted">
+                  Your order is saved. The atelier WhatsApp number is not configured yet; contact details can be added in Admin → Payment Settings.
+                </p>
+              )}
+              {whatsappOrderUrl && (
+                <p className="text-[11px] leading-relaxed text-muted">
+                  Your order and item details are already saved in order history. WhatsApp opens a prepared message with product-image links; review it and tap Send. The message is not sent automatically.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Dynamic Action: QR Code & Payment Section (When Awaiting Payment or Proof Upload) */}
