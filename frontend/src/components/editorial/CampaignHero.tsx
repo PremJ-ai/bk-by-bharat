@@ -20,9 +20,13 @@ interface CampaignHeroProps {
 const FALLBACK_HERO_IMAGE =
   "https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=2200&q=90";
 
+// Commercial-use Mixkit stock clip: "Man putting on a jacket" (720p).
+// Replace with the atelier's own hosted campaign film before the public launch.
+const FALLBACK_HERO_VIDEO = "https://assets.mixkit.co/videos/151/151-720.mp4";
+
 export function CampaignHero({ product }: CampaignHeroProps) {
   const heroRef = useRef<HTMLElement>(null);
-  const heroVideoUrl = product?.videoUrl || process.env.NEXT_PUBLIC_HERO_VIDEO_URL || null;
+  const heroVideoUrl = product?.videoUrl || process.env.NEXT_PUBLIC_HERO_VIDEO_URL || FALLBACK_HERO_VIDEO;
   const heroPoster = product?.videoPosterUrl || product?.imageUrl || FALLBACK_HERO_IMAGE;
 
   useGSAP(
