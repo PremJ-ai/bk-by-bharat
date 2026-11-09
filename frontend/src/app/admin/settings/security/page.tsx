@@ -181,7 +181,7 @@ export default function AdminAccountSecurityPage() {
           </div>
         </div>
 
-        <div className="border border-border bg-canvas-muted p-4 text-xs leading-relaxed text-muted">
+        <div className="border border-border bg-surface-muted p-4 text-xs leading-relaxed text-muted">
           <strong className="text-ink">What happens when you save:</strong> Your current password is checked, the new password is hashed with Argon2id, and every active admin session is revoked. You will be signed out and must log in again on all devices. Password changes require at least 14 characters.
         </div>
 
