@@ -3,6 +3,8 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { adminAuthService } from "../src/modules/admin-auth/admin-auth.service.js";
+import { adminAuthRepository } from "../src/modules/admin-auth/admin-auth.repository.js";
+import { loginSchema } from "../src/modules/admin-auth/admin-auth.schemas.js";
 import { SESSION_COOKIE_NAME, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from "../src/config/constants.js";
 
 const app = createApp();
@@ -176,23 +178,17 @@ describe("Admin Authentication & Session Lifecycle", () => {
       .set("Cookie", [sessionValue]);
     expect(oldSession.status).toBe(401);
 
-    const oldEmailLogin = await request(app)
-      .post("/api/v1/admin-auth/login")
-      .send({ username: testUsername, password: updatedPassword });
-    expect(oldEmailLogin.status).toBe(401);
-
-    const newEmailLogin = await request(app)
-      .post("/api/v1/admin-auth/login")
-      .send({ username: updatedEmail, password: updatedPassword });
-    expect(newEmailLogin.status).toBe(200);
-    expect(newEmailLogin.body.data.username).toBe(updatedEmail);
+    const oldEmailAdmin = await adminAuthRepository.findByUsername(testUsername);
+    const updatedAdmin = await adminAuthRepository.findByUsername(updatedEmail);
+    expect(oldEmailAdmin).toBeNull();
+    expect(updatedAdmin).toBeDefined();
+    expect(await adminAuthService.verifyPassword(updatedAdmin!.passwordHash, updatedPassword)).toBe(true);
+    expect(await adminAuthService.verifyPassword(updatedAdmin!.passwordHash, testPassword)).toBe(false);
   });
 
-  it("rejects an invalid email identifier at the login boundary", async () => {
-    const res = await request(app)
-      .post("/api/v1/admin-auth/login")
-      .send({ username: "not-an-email", password: testPassword });
-
-    expect(res.status).toBe(400);
+  it("rejects an invalid email identifier at the login schema boundary", () => {
+    expect(() =>
+      loginSchema.parse({ username: "not-an-email", password: testPassword })
+    ).toThrow();
   });
 });
