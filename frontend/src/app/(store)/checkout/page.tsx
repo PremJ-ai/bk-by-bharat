@@ -448,7 +448,7 @@ export default function GuestCheckoutPage() {
               </div>
 
               <p className="text-[11px] leading-relaxed text-muted">
-                Cancellation requests are reviewed by the atelier. If payment, packing or courier costs have already been incurred and cannot be recovered, those actual costs may be deducted from an eligible refund; the amount will be confirmed before processing.
+                To cancel, contact the atelier with your order reference. Cancellation and refund requests are reviewed under the store policy and applicable consumer law; no blanket cancellation penalty is added at checkout.
               </p>
 
               {/* Submit CTA */}
