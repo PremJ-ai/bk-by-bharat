@@ -193,8 +193,7 @@ export class CommerceService {
       return newOrder;
     });
 
-    // Prepare a store-side WhatsApp handoff only after the order is committed.
-    // The local adapter records it as QUEUED; a configured Meta provider sends it live.
+    // Resolve the store's customer-facing WhatsApp number for the post-save wa.me handoff.
     const storeSettings = await this.getStoreSettings();
     const storeWhatsAppDigits = (storeSettings.whatsappNumber || "").replace(/\D/g, "");
     const isPlaceholderStoreNumber = [
@@ -202,34 +201,6 @@ export class CommerceService {
     ].includes(storeWhatsAppDigits);
     const storeWhatsAppNumber =
       !storeWhatsAppDigits || isPlaceholderStoreNumber ? null : storeSettings.whatsappNumber;
-
-    if (storeWhatsAppDigits && !isPlaceholderStoreNumber) {
-      const fullAddress = [
-        order.addressLine1,
-        order.addressLine2,
-        `${order.city}, ${order.stateRegion} ${order.postalCode}, ${order.country}`,
-      ].filter(Boolean).join(", ");
-      this.whatsappService.notifyStoreOrderReceived({
-        id: order.id,
-        orderNumber: order.orderNumber,
-        customerName: order.customerName,
-        customerWhatsApp: order.whatsappNumber,
-        recipientPhone: storeSettings.whatsappNumber,
-        address: fullAddress,
-        subtotalPaise: order.subtotalPaise,
-        items: validatedItems.map((item) => ({
-          productName: item.productName,
-          size: item.size,
-          color: item.color,
-          sku: item.sku,
-          quantity: item.quantity,
-          lineTotalPaise: item.lineTotalPaise,
-          imageUrl: item.imageUrl,
-        })),
-      }).catch((error) => {
-        logger.warn({ orderId: order.id, error }, "Unable to prepare store WhatsApp handoff");
-      });
-    }
 
     return {
       orderNumber: order.orderNumber,
