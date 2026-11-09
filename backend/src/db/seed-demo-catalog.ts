@@ -16,6 +16,7 @@ const demoProducts = [
     name: "SAMPLE — Riviera Camp-Collar Shirt",
     slug: "demo-riviera-camp-collar-shirt",
     categorySlug: "shirts",
+    categoryName: "Shirts",
     material: "100% Belgian Heavy Linen (220gsm)",
     pricePaise: 840000,
     description: "Demo catalogue record for testing a relaxed camp-collar linen shirt.",
@@ -35,6 +36,7 @@ const demoProducts = [
     name: "SAMPLE — Atelier Band-Collar Tunic",
     slug: "demo-atelier-band-collar-tunic",
     categorySlug: "shirts",
+    categoryName: "Shirts",
     material: "Cotton and raw silk blend (sample specification)",
     pricePaise: 920000,
     description: "Demo catalogue record for a clean band-collar tunic.",
@@ -54,6 +56,7 @@ const demoProducts = [
     name: "SAMPLE — Double-Pleat Gurkha Trouser",
     slug: "demo-double-pleat-gurkha-trouser",
     categorySlug: "trousers",
+    categoryName: "Trousers",
     material: "Heavy Irish linen (sample specification)",
     pricePaise: 1240000,
     description: "Demo catalogue record for a high-rise double-pleat trouser.",
@@ -73,6 +76,7 @@ const demoProducts = [
     name: "SAMPLE — Florence Single-Pleat Chino",
     slug: "demo-florence-single-pleat-chino",
     categorySlug: "trousers",
+    categoryName: "Trousers",
     material: "Italian cotton twill (sample specification)",
     pricePaise: 1080000,
     description: "Demo catalogue record for a relaxed single-pleat chino.",
@@ -92,6 +96,7 @@ const demoProducts = [
     name: "SAMPLE — Unstructured Wool-Linen Blazer",
     slug: "demo-unstructured-wool-linen-blazer",
     categorySlug: "tailoring",
+    categoryName: "Tailoring",
     material: "Wool and linen blend (sample specification)",
     pricePaise: 2450000,
     description: "Demo catalogue record for a softly structured tailored blazer.",
@@ -111,6 +116,7 @@ const demoProducts = [
     name: "SAMPLE — Raw Matka Silk Overshirt",
     slug: "demo-raw-matka-silk-overshirt",
     categorySlug: "shirts",
+    categoryName: "Shirts",
     material: "Matka silk (sample specification)",
     pricePaise: 1460000,
     description: "Demo catalogue record for a textured silk overshirt.",
@@ -130,10 +136,15 @@ const demoProducts = [
 
 async function main() {
   for (const [index, productData] of demoProducts.entries()) {
-    const category = await prisma.category.findUnique({ where: { slug: productData.categorySlug } });
-    if (!category) {
-      throw new Error(`Missing category "${productData.categorySlug}". Run the normal category setup first.`);
-    }
+    const category = await prisma.category.upsert({
+      where: { slug: productData.categorySlug },
+      update: {},
+      create: {
+        name: productData.categoryName,
+        slug: productData.categorySlug,
+        displayOrder: productData.categorySlug === "shirts" ? 1 : productData.categorySlug === "trousers" ? 2 : 3,
+      },
+    });
 
     const existing = await prisma.product.findUnique({ where: { slug: productData.slug } });
     if (existing) {
