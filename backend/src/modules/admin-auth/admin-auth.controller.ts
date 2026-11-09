@@ -43,6 +43,44 @@ export class AdminAuthController {
     }
   };
 
+  updateSecurity = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (!req.adminUser) {
+        throw new UnauthorizedError("No active admin session found.");
+      }
+
+      const updatedAdmin = await this.service.updateSecurity(
+        req.adminUser.id,
+        req.body,
+        req.ip
+      );
+
+      // All sessions were revoked by the service. Clear this browser's cookies too.
+      res.clearCookie(SESSION_COOKIE_NAME, {
+        httpOnly: true,
+        secure: IS_PROD,
+        sameSite: "lax",
+        path: "/",
+      });
+      res.clearCookie(CSRF_COOKIE_NAME, {
+        secure: IS_PROD,
+        sameSite: "lax",
+        path: "/",
+      });
+
+      res.status(200).json({
+        data: {
+          success: true,
+          email: updatedAdmin.username,
+          reauthenticationRequired: true,
+        },
+        meta: { requestId: req.id },
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   logout = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const sessionToken = req.cookies?.[SESSION_COOKIE_NAME];
