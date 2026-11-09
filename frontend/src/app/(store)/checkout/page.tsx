@@ -167,7 +167,7 @@ export default function GuestCheckoutPage() {
             Guest Checkout &amp; Delivery
           </h1>
           <p className="text-muted text-sm leading-relaxed font-sans max-w-xl pt-1">
-            No account is required. Orders follow the existing invoice and manual payment-verification workflow. Automated WhatsApp Cloud API messaging is not enabled in this phase.
+            No account is needed. We save your order first, then prepare the order details for you to send to the atelier on WhatsApp.
           </p>
         </div>
 
@@ -206,7 +206,7 @@ export default function GuestCheckoutPage() {
                     1. Recipient &amp; WhatsApp Details
                   </h2>
                   <p className="text-xs text-muted font-sans mt-0.5">
-                    This number is collected for order-related contact. Automated WhatsApp Cloud API notifications are not enabled in this phase.
+                    Use a WhatsApp number where our team can reach you about payment and delivery.
                   </p>
                 </div>
 
@@ -406,12 +406,16 @@ export default function GuestCheckoutPage() {
                   </div>
                   <label htmlFor="whatsappConsent" className="text-xs text-ink leading-relaxed cursor-pointer select-none">
                     <span className="font-medium text-navy block mb-0.5">
-                      Consent to Order-Related Phone Contact *
+                      WhatsApp order updates *
                     </span>
-                    I consent to the atelier using this number for order-related contact. Automated WhatsApp Cloud API messages are not enabled in this phase, so this consent does not guarantee automated notifications. Guest checkout does not create an online customer account.
+                    I agree to receive messages about this order and its delivery on the number above. My order is saved in the store's order history before WhatsApp opens.
                   </label>
                 </div>
               </div>
+
+              <p className="text-[11px] leading-relaxed text-muted">
+                Cancellation requests are reviewed by the atelier. If payment, packing or courier costs have already been incurred and cannot be recovered, those actual costs may be deducted from an eligible refund; the amount will be confirmed before processing.
+              </p>
 
               {/* Submit CTA */}
               <button
@@ -426,7 +430,7 @@ export default function GuestCheckoutPage() {
                   </>
                 ) : (
                   <>
-                    <span>Place Guest Order &mdash; {formatINR(subtotalPaise)}</span>
+                    <span>Save order &amp; continue to WhatsApp &mdash; {formatINR(subtotalPaise)}</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
