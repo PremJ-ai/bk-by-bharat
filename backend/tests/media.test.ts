@@ -14,7 +14,7 @@ describe("Milestone 5: Media Service and Admin Media Endpoints", () => {
   beforeAll(async () => {
     // Clean up previous test admin if left over
     await prisma.adminUser.deleteMany({
-      where: { username: "media_admin_test" },
+      where: { username: "media_admin_test@store.local" },
     });
     await prisma.mediaAsset.deleteMany({
       where: { altText: { contains: "TestMedia" } },
@@ -24,7 +24,7 @@ describe("Milestone 5: Media Service and Admin Media Endpoints", () => {
     const passwordHash = await argon2.hash("SuperSecretMediaAdminPass123!");
     await prisma.adminUser.create({
       data: {
-        username: "media_admin_test",
+        username: "media_admin_test@store.local",
         passwordHash,
         role: "ADMIN",
         status: "ACTIVE",
@@ -35,7 +35,7 @@ describe("Milestone 5: Media Service and Admin Media Endpoints", () => {
     const loginRes = await request(app)
       .post("/api/v1/admin-auth/login")
       .send({
-        username: "media_admin_test",
+        username: "media_admin_test@store.local",
         password: "SuperSecretMediaAdminPass123!",
       });
 
@@ -73,7 +73,7 @@ describe("Milestone 5: Media Service and Admin Media Endpoints", () => {
       where: { altText: { contains: "TestMedia" } },
     });
     await prisma.adminUser.deleteMany({
-      where: { username: "media_admin_test" },
+      where: { username: "media_admin_test@store.local" },
     });
   });
 
