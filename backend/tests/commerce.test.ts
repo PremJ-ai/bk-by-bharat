@@ -21,13 +21,13 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
   beforeAll(async () => {
     // 1. Create dedicated admin
     await prisma.adminUser.deleteMany({
-      where: { username: "commerce_admin_test" },
+      where: { username: "commerce_admin_test@store.local" },
     });
 
     const passwordHash = await argon2.hash("CommerceAdminPass123!");
     await prisma.adminUser.create({
       data: {
-        username: "commerce_admin_test",
+        username: "commerce_admin_test@store.local",
         passwordHash,
         role: "ADMIN",
         status: "ACTIVE",
@@ -38,7 +38,7 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     const loginRes = await request(app)
       .post("/api/v1/admin-auth/login")
       .send({
-        username: "commerce_admin_test",
+        username: "commerce_admin_test@store.local",
         password: "CommerceAdminPass123!",
       });
 
@@ -109,7 +109,7 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     }
 
     await prisma.adminUser.deleteMany({
-      where: { username: "commerce_admin_test" },
+      where: { username: "commerce_admin_test@store.local" },
     });
   });
 
