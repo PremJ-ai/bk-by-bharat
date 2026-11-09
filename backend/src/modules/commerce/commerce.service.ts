@@ -193,8 +193,41 @@ export class CommerceService {
       return newOrder;
     });
 
-    // WhatsApp is handed off from the guest confirmation page via a user-initiated
-    // wa.me link. This ensures the order is persisted before the customer opens WhatsApp.
+    // Prepare a store-side WhatsApp handoff only after the order is committed.
+    // The local adapter records it as QUEUED; a configured Meta provider sends it live.
+    const storeSettings = await this.getStoreSettings();
+    const storeWhatsAppDigits = (storeSettings.whatsappNumber || "").replace(/\\D/g, "");
+    const isPlaceholderStoreNumber = [
+      "919876543210", "910000000000", "911234567890",
+    ].includes(storeWhatsAppDigits);
+
+    if (storeWhatsAppDigits && !isPlaceholderStoreNumber) {
+      const fullAddress = [
+        order.addressLine1,
+        order.addressLine2,
+        `${order.city}, ${order.stateRegion} ${order.postalCode}, ${order.country}`,
+      ].filter(Boolean).join(", ");
+      this.whatsappService.notifyStoreOrderReceived({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        customerWhatsApp: order.whatsappNumber,
+        recipientPhone: storeSettings.whatsappNumber,
+        address: fullAddress,
+        subtotalPaise: order.subtotalPaise,
+        items: validatedItems.map((item) => ({
+          productName: item.productName,
+          size: item.size,
+          color: item.color,
+          sku: item.sku,
+          quantity: item.quantity,
+          lineTotalPaise: item.lineTotalPaise,
+          imageUrl: item.imageUrl,
+        })),
+      }).catch((error) => {
+        logger.warn({ orderId: order.id, error }, "Unable to prepare store WhatsApp handoff");
+      });
+    }
 
     return {
       orderNumber: order.orderNumber,
