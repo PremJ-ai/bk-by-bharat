@@ -22,10 +22,13 @@ async function main() {
   let password = "";
 
   for (const arg of args) {
-    if (arg.startsWith("--username=")) {
-      username = arg.split("=")[1];
+    if (arg.startsWith("--email=")) {
+      username = arg.slice("--email=".length);
+    } else if (arg.startsWith("--username=")) {
+      // Backward-compatible flag; the value must now be a real email address.
+      username = arg.slice("--username=".length);
     } else if (arg.startsWith("--password=")) {
-      password = arg.split("=")[1];
+      password = arg.slice("--password=".length);
     }
   }
 
@@ -34,24 +37,24 @@ async function main() {
     const rl = readline.createInterface({ input, output });
     try {
       if (!username) {
-        username = await rl.question("Enter Administrator Username / Email: ");
+        username = await rl.question("Enter Administrator Email: ");
       }
       if (!password) {
-        password = await rl.question("Enter Strong Password (min 8 chars): ");
+        password = await rl.question("Enter Strong Password (min 14 characters): ");
       }
     } finally {
       rl.close();
     }
   }
 
-  username = username.trim();
-  if (!username || username.length < 3) {
-    console.error("❌ Error: Username must be at least 3 characters.");
+  username = username.trim().toLowerCase();
+  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(username)) {
+    console.error("❌ Error: Administrator login must be a valid email address.");
     process.exit(1);
   }
 
-  if (!password || password.length < 8) {
-    console.error("❌ Error: Password must be at least 8 characters.");
+  if (!password || password.length < 14 || password.length > 128) {
+    console.error("❌ Error: Password must be between 14 and 128 characters.");
     process.exit(1);
   }
 
@@ -59,7 +62,7 @@ async function main() {
     const admin = await adminAuthService.bootstrapFirstAdmin(username, password);
     console.log("\n✅ Administrator created successfully!");
     console.log(`- ID: ${admin.id}`);
-    console.log(`- Username: ${admin.username}`);
+    console.log(`- Email: ${admin.username}`);
     console.log(`- Role: ${admin.role}`);
     console.log(`- Status: ${admin.status}`);
     console.log("\nYou may now log in at /admin/login\n");
