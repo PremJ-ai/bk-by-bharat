@@ -48,7 +48,7 @@ async function main() {
   }
 
   username = username.trim().toLowerCase();
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(username)) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(username)) {
     console.error("❌ Error: Administrator login must be a valid email address.");
     process.exit(1);
   }
