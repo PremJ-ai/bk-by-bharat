@@ -146,7 +146,7 @@ export default function GuestCheckoutPage() {
           ]),
           `Items subtotal: ${formatINR(res.subtotalPaise)}`,
           "Please confirm availability and share the final invoice and UPI QR payment instructions.",
-        ].filter(Boolean).join("\\n");
+        ].filter(Boolean).join("\n");
         whatsappTab.opener = null;
         whatsappTab.location.href = `https://wa.me/${storeDigits}?text=${encodeURIComponent(whatsappMessage)}`;
       } else if (whatsappTab) {
@@ -464,7 +464,7 @@ export default function GuestCheckoutPage() {
                   </>
                 ) : (
                   <>
-                    <span>Save order &amp; continue to WhatsApp &mdash; {formatINR(subtotalPaise)}</span>
+                    <span>Order Now &mdash; {formatINR(subtotalPaise)}</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
