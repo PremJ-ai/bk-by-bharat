@@ -300,7 +300,7 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
         `Payee: ${storePaymentSettings.payeeName}`,
         `Payment QR: ${paymentQrUrl}`,
         "Please include the order number in payment remarks and submit your UTR/payment proof through the order page.",
-      ].join("\\n"))}`
+      ].join("\n"))}`
     : null;
   const latestShipment = order.shipments?.[0];
   const trackingWhatsAppUrl = customerWhatsAppDigits && latestShipment
@@ -352,7 +352,17 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 rounded bg-[#16845b] px-3.5 py-2 text-[10px] font-semibold uppercase tracking-caps text-white hover:bg-[#116b49]"
             >
-              <MessageSquare className="h-3.5 w-3.5" /> Send payment QR
+              <MessageSquare className="h-3.5 w-3.5" /> Open WhatsApp payment request
+            </a>
+          )}
+          {paymentQrUrl && (
+            <a
+              href={paymentQrUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded border border-border bg-surface px-3.5 py-2 text-[10px] font-semibold uppercase tracking-caps text-ink hover:border-gold"
+            >
+              <Eye className="h-3.5 w-3.5" /> Open QR image
             </a>
           )}
           {trackingWhatsAppUrl && (
@@ -426,14 +436,26 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
             </h2>
             <div className="divide-y divide-border/60">
               {order.items.map((item: any) => (
-                <div key={item.id} className="py-3 first:pt-0 last:pb-0 flex justify-between items-center text-xs">
-                  <div>
-                    <h4 className="font-medium text-ink text-sm">{item.productName}</h4>
-                    <p className="text-muted text-[11px] mt-0.5 font-mono">
-                      SKU: {item.sku} &middot; Size {item.size} &middot; Qty: {item.quantity}
-                    </p>
+                <div key={item.id} className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex min-w-0 items-center gap-3">
+                    {item.imageUrl ? (
+                      <img
+                        src={item.imageUrl}
+                        alt={item.productName}
+                        loading="lazy"
+                        className="h-16 w-12 shrink-0 border border-border bg-surface-muted object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-16 w-12 shrink-0 items-center justify-center border border-border bg-surface-muted text-[9px] text-muted">No image</div>
+                    )}
+                    <div className="min-w-0">
+                      <h4 className="font-medium text-ink text-sm">{item.productName}</h4>
+                      <p className="mt-0.5 text-[11px] text-muted font-mono">
+                        SKU: {item.sku} · Size {item.size} · Qty: {item.quantity}
+                      </p>
+                    </div>
                   </div>
-                  <span className="font-mono font-semibold text-ink tabular-nums text-sm">
+                  <span className="shrink-0 font-mono text-sm font-semibold tabular-nums text-ink">
                     {formatINR(item.lineTotalPaise)}
                   </span>
                 </div>
