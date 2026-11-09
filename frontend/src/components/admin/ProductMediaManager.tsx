@@ -266,7 +266,7 @@ export function ProductMediaManager({
     if (inputRef.current) {
       inputRef.current.accept = replaceIndex === null
         ? [...IMAGE_TYPES, ...VIDEO_TYPES].join(",")
-        : items[replaceIndex]?.mediaType === "VIDEO" ? "video/mp4" : IMAGE_TYPES.join(",");
+        : items[replaceIndex]?.mediaType === "VIDEO" ? VIDEO_TYPES.join(",") : IMAGE_TYPES.join(",");
       inputRef.current.multiple = replaceIndex === null;
       inputRef.current.click();
     }
@@ -278,7 +278,7 @@ export function ProductMediaManager({
         <div>
           <h2 className="font-display text-lg text-ink">Product Gallery</h2>
           <p className="mt-1 text-[11px] text-muted">
-            Four images and one MP4 video (3–5 seconds). Image size limit: 10 MB; video: 50 MB.
+            Up to four images and one short MP4 or WebM clip (3–5 seconds). Images up to 10 MB; video up to 50 MB.
           </p>
         </div>
         <button
