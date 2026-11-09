@@ -545,7 +545,7 @@ export class WhatsAppService {
       ...itemLines,
       `Items subtotal: ₹${(order.subtotalPaise / 100).toLocaleString("en-IN")}`,
       "Review the order in Admin → Orders. Confirm stock, then issue the final invoice and payment QR.",
-    ].join("\\n");
+    ].join("\n");
 
     return this.sendOutboundMessage({
       orderId: order.id,
