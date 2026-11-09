@@ -46,13 +46,22 @@ export default function AdminOverviewPage() {
 
     async function loadData() {
       try {
-        const [sessionRes, healthRes] = await Promise.all([
+        const [sessionResult, healthResult] = await Promise.allSettled([
           apiClient<AdminUserDTO>("/admin-auth/session"),
           apiClient<HealthStatus>("/health/ready"),
         ]);
         if (!isMounted) return;
-        setAdmin(sessionRes.data);
-        setHealth(healthRes.data);
+        if (sessionResult.status === "fulfilled") {
+          setAdmin(sessionResult.value.data);
+        } else {
+          console.error("Admin session could not be refreshed", sessionResult.reason);
+        }
+        if (healthResult.status === "fulfilled") {
+          setHealth(healthResult.value.data);
+        } else {
+          setHealth(null);
+          console.error("Backend readiness could not be checked", healthResult.reason);
+        }
       } catch (err) {
         console.error("Failed to load admin telemetry", err);
       } finally {
