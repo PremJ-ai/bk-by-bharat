@@ -157,17 +157,8 @@ export default function AdminOverviewPage() {
             Welcome back{admin?.username ? `, ${admin.username.split("@")[0]}` : ""}.
           </h1>
           <p className="admin-dashboard-subtitle max-w-2xl">
-            Your atelier workspace is ready. Review the live service status and continue with the
-            tasks that keep the store moving.
+            Manage products, orders, payments and customer updates.
           </p>
-        </div>
-        <div className="admin-welcome-quote">
-          <p>“Good work is built on thoughtful details and steady progress.”</p>
-          <span />
-          <div className="mt-4 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.13em] text-[#95627c]">
-            <Activity className="h-3.5 w-3.5" />
-            Atelier operations
-          </div>
         </div>
       </section>
 
