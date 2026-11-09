@@ -18,7 +18,7 @@ export default function AdminLoginPage() {
     setErrorMessage(null);
 
     if (!username.trim() || !password) {
-      setErrorMessage("Please provide both username and password.");
+      setErrorMessage("Please provide your administrator email and password.");
       return;
     }
 
@@ -84,7 +84,7 @@ export default function AdminLoginPage() {
               htmlFor="username"
               className="block text-xs uppercase tracking-caps text-canvas/80 mb-2 font-medium"
             >
-              Staff Identifier / Email
+              Administrator email
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-canvas/40">
@@ -92,12 +92,13 @@ export default function AdminLoginPage() {
               </span>
               <input
                 id="username"
-                type="text"
-                autoComplete="username"
+                type="email"
+                inputMode="email"
+                autoComplete="email"
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="admin@store.local"
+                placeholder="you@yourdomain.com"
                 className="w-full bg-navy-strong border border-white/20 pl-10 pr-4 py-2.5 text-sm text-canvas placeholder:text-canvas/30 focus:border-gold focus:ring-1 focus:ring-gold focus:outline-none rounded-none transition-colors"
                 disabled={loading}
               />
@@ -150,7 +151,7 @@ export default function AdminLoginPage() {
 
         <div className="mt-8 pt-6 border-t border-white/10 text-center">
           <p className="text-[11px] text-canvas/40 leading-relaxed font-sans">
-            One-time administrative bootstrap required. Customer self-registration is disabled by policy.
+            Use the email registered for your administrator account. Customer registration is disabled.
           </p>
         </div>
       </div>
