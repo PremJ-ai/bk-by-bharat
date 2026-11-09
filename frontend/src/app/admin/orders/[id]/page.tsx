@@ -373,6 +373,9 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
             <RefreshCw className="w-3.5 h-3.5" />
             <span>Sync Order</span>
           </button>
+          <p className="basis-full text-[10px] leading-relaxed text-muted">
+            WhatsApp opens a prepared message for you to review and send. Payment QR is shared as a link; this does not send an automated WhatsApp message or media attachment.
+          </p>
         </div>
       </div>
 
@@ -860,6 +863,9 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
               </div>
 
               <form onSubmit={handleProcessRefund} className="space-y-3">
+                <p className="text-[10px] leading-relaxed text-muted">
+                  For an approved cancellation, enter the net refund after deducting only documented, non-recoverable costs already incurred (for example, completed alterations or courier charges). Tell the customer the itemised amount before processing; do not apply an arbitrary penalty.
+                </p>
                 <div>
                   <label className="text-[11px] uppercase tracking-caps text-muted block mb-1">
                     Refund Amount (INR) *
