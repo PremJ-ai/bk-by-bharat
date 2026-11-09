@@ -196,10 +196,12 @@ export class CommerceService {
     // Prepare a store-side WhatsApp handoff only after the order is committed.
     // The local adapter records it as QUEUED; a configured Meta provider sends it live.
     const storeSettings = await this.getStoreSettings();
-    const storeWhatsAppDigits = (storeSettings.whatsappNumber || "").replace(/\\D/g, "");
+    const storeWhatsAppDigits = (storeSettings.whatsappNumber || "").replace(/\D/g, "");
     const isPlaceholderStoreNumber = [
       "919876543210", "910000000000", "911234567890",
     ].includes(storeWhatsAppDigits);
+    const storeWhatsAppNumber =
+      !storeWhatsAppDigits || isPlaceholderStoreNumber ? null : storeSettings.whatsappNumber;
 
     if (storeWhatsAppDigits && !isPlaceholderStoreNumber) {
       const fullAddress = [
@@ -228,14 +230,6 @@ export class CommerceService {
         logger.warn({ orderId: order.id, error }, "Unable to prepare store WhatsApp handoff");
       });
     }
-
-    const storeSettings = await this.getStoreSettings();
-    const storeWhatsAppDigits = (storeSettings.whatsappNumber || "").replace(/\D/g, "");
-    const storeWhatsAppNumber =
-      !storeWhatsAppDigits ||
-      ["919876543210", "910000000000", "911234567890"].includes(storeWhatsAppDigits)
-        ? null
-        : storeSettings.whatsappNumber;
 
     return {
       orderNumber: order.orderNumber,
