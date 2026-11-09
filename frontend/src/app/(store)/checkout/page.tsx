@@ -87,6 +87,10 @@ export default function GuestCheckoutPage() {
 
     setLoading(true);
 
+    // Reserve a browser tab synchronously within the customer's click so popup blockers
+    // do not discard the later WhatsApp handoff after the API request completes.
+    const whatsappTab = window.open("about:blank", "_blank");
+
     try {
       // Clean and normalize WhatsApp phone
       const cleanPhone = whatsappNumber.replace(/[\s-]/g, "");
@@ -120,12 +124,42 @@ export default function GuestCheckoutPage() {
         items: checkoutItems,
       });
 
-      // Clear the shopping bag
+      // Open a prepared message to the configured store number only after PostgreSQL
+      // has accepted the order. wa.me cannot send on the customer's behalf; the customer
+      // reviews the draft and taps Send. Product images are included as public links.
+      const storeDigits = res.storeWhatsAppNumber?.replace(/\D/g, "") || "";
+      if (whatsappTab && storeDigits) {
+        const whatsappMessage = [
+          "NEW WEBSITE ORDER — BK BY BHARAT",
+          `Order: ${res.orderNumber}`,
+          `Customer: ${fullName.trim()}`,
+          `Customer WhatsApp: ${cleanPhone}`,
+          "Delivery address:",
+          addressLine1.trim(),
+          addressLine2.trim(),
+          `${city.trim()}, ${stateRegion.trim()} ${postalCode.trim()}, India`,
+          "Items:",
+          ...res.items.flatMap((item, index) => [
+            `${index + 1}. ${item.productName} | Size: ${item.size} | Colour: ${item.color} | Qty: ${item.quantity}`,
+            `SKU: ${item.sku} | Fabric: ${item.material} | Unit: ${formatINR(item.unitPricePaise)} | Line: ${formatINR(item.lineTotalPaise)}`,
+            item.imageUrl ? `Product image: ${item.imageUrl}` : "",
+          ]),
+          `Items subtotal: ${formatINR(res.subtotalPaise)}`,
+          "Please confirm availability and share the final invoice and UPI QR payment instructions.",
+        ].filter(Boolean).join("\\n");
+        whatsappTab.opener = null;
+        whatsappTab.location.href = `https://wa.me/${storeDigits}?text=${encodeURIComponent(whatsappMessage)}`;
+      } else if (whatsappTab) {
+        whatsappTab.close();
+      }
+
+      // Clear the shopping bag only after order persistence succeeds.
       clearCart();
 
-      // Redirect to private confirmation screen with real guest token
+      // Keep the original tab on the private status / payment page.
       router.push(`/orders/confirmation/${res.guestStatusToken}`);
     } catch (error: unknown) {
+      if (whatsappTab && !whatsappTab.closed) whatsappTab.close();
       setErrorMessage(
         error instanceof ApiError
           ? error.message
