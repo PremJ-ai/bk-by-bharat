@@ -9,6 +9,7 @@ import type { AdminUserDTO } from "@/lib/api/types";
 export default function AdminAccountSecurityPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
+  const [confirmEmail, setConfirmEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -43,6 +44,10 @@ export default function AdminAccountSecurityPage() {
       setError("Enter the email address you want to use for admin sign-in.");
       return;
     }
+    if (email.trim().toLowerCase() !== confirmEmail.trim().toLowerCase()) {
+      setError("The administrator email addresses do not match.");
+      return;
+    }
     if (!currentPassword) {
       setError("Enter your current password to authorize this change.");
       return;
@@ -64,6 +69,7 @@ export default function AdminAccountSecurityPage() {
           method: "PUT",
           body: JSON.stringify({
             email: email.trim().toLowerCase(),
+            confirmEmail: confirmEmail.trim().toLowerCase(),
             currentPassword,
             newPassword: newPassword || undefined,
           }),
@@ -130,6 +136,23 @@ export default function AdminAccountSecurityPage() {
             placeholder="owner@yourdomain.com"
           />
           <p className="text-[11px] text-muted">This becomes the email used on the admin login screen. It must be an inbox you control.</p>
+        </div>
+
+        <div className="space-y-2">
+          <label htmlFor="confirm-admin-email" className="flex items-center gap-2 text-xs font-semibold uppercase tracking-caps text-muted">
+            <Mail className="h-4 w-4" /> Confirm administrator email
+          </label>
+          <input
+            id="confirm-admin-email"
+            type="email"
+            autoComplete="email"
+            required
+            maxLength={254}
+            value={confirmEmail}
+            onChange={(event) => setConfirmEmail(event.target.value)}
+            className="w-full border border-border bg-canvas px-4 py-3 text-sm text-ink outline-none focus:border-gold"
+            placeholder="Repeat your email address"
+          />
         </div>
 
         <div className="space-y-2">
