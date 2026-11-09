@@ -195,6 +195,18 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
   });
 
   it("successfully creates a guest order in AWAITING_ADMIN_REVIEW with explicit consent and timestamp", async () => {
+    await prisma.storeSettings.upsert({
+      where: { id: "default" },
+      update: { whatsappNumber: "+919810012345" },
+      create: {
+        id: "default",
+        upiId: "bharatatelier@icici",
+        payeeName: "Bharat Atelier Private Limited",
+        paymentInstructions: "Scan the QR using a supported UPI app and include the order reference.",
+        whatsappNumber: "+919810012345",
+      },
+    });
+
     const res = await request(app)
       .post("/api/v1/orders/checkout")
       .send({
@@ -235,18 +247,16 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     expect(dbOrder?.items).toHaveLength(1);
     expect(dbOrder?.items[0].quantity).toBe(2);
 
-    // Verify outbound WhatsApp confirmation was logged
-    await expect
-      .poll(
-        async () => {
-          const message = await prisma.whatsAppMessage.findFirst({
-            where: { orderId: dbOrder!.id, templateName: "order_received" },
-          });
-          return message?.bodyText;
-        },
-        { timeout: 2000 },
-      )
-      .toContain(orderNumber);
+    // The order is persisted before the WhatsApp handoff. Local fallback must remain queued,
+    // never falsely report the manual WhatsApp message as delivered.
+    const handoff = await prisma.whatsAppMessage.findFirst({
+      where: { orderId: dbOrder!.id, templateName: "store_order_handoff" },
+    });
+    expect(handoff).toBeDefined();
+    expect(handoff?.recipientPhone).toBe("+919810012345");
+    expect(handoff?.bodyText).toContain(orderNumber);
+    expect(handoff?.bodyText).toContain("Aarav Sharma");
+    expect(handoff?.status).toBe("QUEUED");
   });
 
   // ---------------------------------------------------------------------------
