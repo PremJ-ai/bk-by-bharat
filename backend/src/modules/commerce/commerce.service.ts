@@ -229,6 +229,14 @@ export class CommerceService {
       });
     }
 
+    const storeSettings = await this.getStoreSettings();
+    const storeWhatsAppDigits = (storeSettings.whatsappNumber || "").replace(/\D/g, "");
+    const storeWhatsAppNumber =
+      !storeWhatsAppDigits ||
+      ["919876543210", "910000000000", "911234567890"].includes(storeWhatsAppDigits)
+        ? null
+        : storeSettings.whatsappNumber;
+
     return {
       orderNumber: order.orderNumber,
       guestStatusToken: rawToken,
@@ -237,6 +245,18 @@ export class CommerceService {
       totalPaise: order.totalPaise,
       currency: order.currency,
       itemsCount: order.items.length,
+      items: order.items.map((item) => ({
+        productName: item.productName,
+        sku: item.sku,
+        size: item.size,
+        color: item.color,
+        material: item.material,
+        unitPricePaise: item.unitPricePaise,
+        quantity: item.quantity,
+        lineTotalPaise: item.lineTotalPaise,
+        imageUrl: item.imageUrl,
+      })),
+      storeWhatsAppNumber,
       whatsappConsent: order.whatsappConsent,
       whatsappConsentAt: order.whatsappConsentAt,
     };
