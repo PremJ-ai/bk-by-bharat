@@ -204,18 +204,16 @@ export class HuggingFaceMediaGenerationProvider implements ImageGenerationProvid
       throw new Error("HF_IMAGE_MODEL must be a Hugging Face model ID in owner/model format.");
     }
 
-    const prompt =
-      options.prompt?.trim() ||
-      [
-        "Luxury menswear editorial product photography.",
-        `Garment: ${options.productName}.`,
-        `Textile: ${options.material}.`,
-        `Category: ${options.category}.`,
-        options.silhouetteNotes || "",
-        "Accurate garment construction, natural fabric drape, visible weave and stitching.",
-        "Neutral warm architectural studio, natural softbox lighting, refined premium fashion campaign.",
-        "Single garment, clean composition, realistic human proportions, no text, no logos, no watermark.",
-      ].filter(Boolean).join(" ");
+    const prompt = [
+      "Create one photorealistic premium menswear ecommerce editorial image.",
+      `Garment: ${options.productName}.`,
+      `Category: ${options.category}.`,
+      `Fabric and texture to preserve accurately: ${options.material}.`,
+      options.silhouetteNotes ? `Construction details: ${options.silhouetteNotes}.` : "",
+      options.prompt?.trim() ? `Creative direction: ${options.prompt.trim()}.` : "Use a refined neutral architectural studio with soft natural light.",
+      "Keep the garment's stated category, fabric, colour cues and construction coherent. Show the complete garment clearly with realistic drape, seams and proportions.",
+      "One main subject, clean composition, no invented logos, no text, no watermark.",
+    ].filter(Boolean).join(" ");
 
     if (prompt.length > 3000) {
       throw new Error("Image-generation prompt must be 3000 characters or fewer.");
