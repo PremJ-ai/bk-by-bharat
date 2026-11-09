@@ -26,6 +26,7 @@ const navLinks = [
   { href: "/admin/products", label: "Products & Media", icon: Package },
   { href: "/admin/orders", label: "Orders & Verification", icon: ShoppingBag },
   { href: "/admin/settings/payment", label: "Payment QR & Bank", icon: QrCode },
+  { href: "/admin/settings/security", label: "Account Security", icon: ShieldCheck },
   { href: "/admin/whatsapp", label: "WhatsApp Logs", icon: MessageCircle },
 ];
 
