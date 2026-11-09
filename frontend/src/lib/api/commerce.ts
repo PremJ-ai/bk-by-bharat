@@ -23,6 +23,18 @@ export interface GuestCheckoutResult {
   totalPaise: number;
   currency: string;
   itemsCount: number;
+  storeWhatsAppNumber?: string | null;
+  items: {
+    productName: string;
+    sku: string;
+    size: string;
+    color: string;
+    material: string;
+    unitPricePaise: number;
+    quantity: number;
+    lineTotalPaise: number;
+    imageUrl?: string | null;
+  }[];
 }
 
 export interface OrderItemModel {
