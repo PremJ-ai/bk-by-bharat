@@ -162,6 +162,7 @@ describe("Admin Authentication & Session Lifecycle", () => {
       .set(CSRF_HEADER_NAME, csrfTokenValue)
       .send({
         email: updatedEmail,
+        confirmEmail: updatedEmail,
         currentPassword: testPassword,
         newPassword: updatedPassword,
       });
