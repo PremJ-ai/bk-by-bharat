@@ -81,6 +81,7 @@ export interface PaymentDetailsModel {
   paymentInstructions: string;
   upiDeepLink: string;
   qrImageUrl?: string | null;
+  storeWhatsAppNumber?: string | null;
 }
 
 export interface GuestOrderStatusModel {
