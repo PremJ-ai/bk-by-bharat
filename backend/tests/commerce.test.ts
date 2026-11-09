@@ -247,16 +247,26 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     expect(dbOrder?.items).toHaveLength(1);
     expect(dbOrder?.items[0].quantity).toBe(2);
 
-    // The order is persisted before the WhatsApp handoff. Local fallback must remain queued,
-    // never falsely report the manual WhatsApp message as delivered.
+    // The database is authoritative: checkout saves the order and returns the
+    // configured destination plus item snapshots for a customer-initiated wa.me handoff.
+    expect(res.body.data.storeWhatsAppNumber).toBe("+919810012345");
+    expect(res.body.data.items).toHaveLength(1);
+    expect(res.body.data.items[0]).toMatchObject({
+      productName: "Test Tailored Camp Shirt",
+      sku: testVariantSku,
+      size: "M",
+      material: "Belgian Linen",
+      quantity: 2,
+      lineTotalPaise: 1700000,
+    });
+    expect(res.body.data.items[0].imageUrl).toBeNull();
+
+    // No mock outbound message may be reported as delivered: the customer
+    // reviews the WhatsApp draft and taps Send on their own device.
     const handoff = await prisma.whatsAppMessage.findFirst({
       where: { orderId: dbOrder!.id, templateName: "store_order_handoff" },
     });
-    expect(handoff).toBeDefined();
-    expect(handoff?.recipientPhone).toBe("+919810012345");
-    expect(handoff?.bodyText).toContain(orderNumber);
-    expect(handoff?.bodyText).toContain("Aarav Sharma");
-    expect(handoff?.status).toBe("QUEUED");
+    expect(handoff).toBeNull();
   });
 
   // ---------------------------------------------------------------------------
