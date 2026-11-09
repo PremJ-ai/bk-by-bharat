@@ -658,17 +658,6 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
             </div>
 
             <div className="pt-3 border-t border-border space-y-2">
-              <a
-                href={whatsappInquiryUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full bg-[#25D366] hover:bg-[#1EBE5D] text-white py-2.5 px-4 text-xs uppercase tracking-caps font-semibold flex items-center justify-center space-x-2 transition-colors rounded shadow-xs"
-              >
-                <MessageSquare className="w-4 h-4" />
-                <span>Message Atelier on WhatsApp</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-
               {!isShipped && !isCancelled && !isCancellationRequested && !isRefundRequested && !isRefunded && (
                 <button
                   type="button"
