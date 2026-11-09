@@ -13,11 +13,11 @@ export interface WhatsAppProvider {
     recipientPhone: string;
     templateName?: string;
     bodyText: string;
-  }): Promise<{ providerMessageId: string; status: "SENT" | "FAILED"; error?: string }>;
+  }): Promise<{ providerMessageId: string; status: "QUEUED" | "SENT" | "FAILED"; error?: string }>;
 }
 
 /**
- * Built-in Atelier Local WhatsApp Test Adapter.
+ * Built-in Atelier WhatsApp manual-handoff adapter.
  * Reliably logs and persists all outbound transactional messages in the PostgreSQL ledger
  * without requiring third-party Meta Business Manager credentials in test/offline environments.
  */
@@ -36,7 +36,7 @@ export class LocalAtelierWhatsAppProvider implements WhatsAppProvider {
     const providerMessageId = `wam-local-${Date.now()}-${crypto.randomBytes(6).toString("hex")}`;
     return {
       providerMessageId,
-      status: "SENT",
+      status: "QUEUED",
     };
   }
 }
@@ -130,7 +130,7 @@ export class WhatsAppService {
       isLiveConnected: this.provider.isLive(),
       instructions: this.provider.isLive()
         ? "Connected to Meta WhatsApp Cloud API."
-        : "Operating via Local Atelier Audit Adapter. Outbound messages are recorded in PostgreSQL and logged.",
+        : "WhatsApp Cloud API is not configured. Messages are queued in the order ledger; open the customer's WhatsApp chat and send them manually.",
     };
   }
 
@@ -191,7 +191,7 @@ export class WhatsAppService {
         recipientPhone,
         templateName,
         bodyText,
-        status: dispatchResult.status === "SENT" ? "SENT" : "FAILED",
+        status: dispatchResult.status,
         errorMessage: dispatchResult.error || null,
       },
     });
