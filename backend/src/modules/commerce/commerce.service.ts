@@ -193,17 +193,8 @@ export class CommerceService {
       return newOrder;
     });
 
-    // 5. Send asynchronous WhatsApp confirmation
-    this.whatsappService
-      .notifyOrderReceived({
-        id: order.id,
-        orderNumber: order.orderNumber,
-        customerName: order.customerName,
-        whatsappNumber: order.whatsappNumber,
-        subtotalPaise: order.subtotalPaise,
-        rawToken,
-      })
-      .catch(() => {});
+    // WhatsApp is handed off from the guest confirmation page via a user-initiated
+    // wa.me link. This ensures the order is persisted before the customer opens WhatsApp.
 
     return {
       orderNumber: order.orderNumber,
@@ -254,6 +245,12 @@ export class CommerceService {
     }
 
     const currentInvoice = order.invoices[0] || null;
+    const storeWhatsAppDigits = (settings.whatsappNumber || "").replace(/\D/g, "");
+    const storeWhatsAppNumber =
+      !storeWhatsAppDigits ||
+      ["919876543210", "910000000000", "911234567890"].includes(storeWhatsAppDigits)
+        ? null
+        : settings.whatsappNumber;
     const finalAmountInr = (order.totalPaise / 100).toFixed(2);
     const hasValidPaymentSettings = !this.isPlaceholderStoreSettings(settings);
     const upiDeepLink = hasValidPaymentSettings
@@ -351,6 +348,7 @@ export class CommerceService {
         paymentInstructions: settings.paymentInstructions,
         upiDeepLink,
         qrImageUrl: settings.qrImageUrl || null,
+        storeWhatsAppNumber,
       },
     };
   }
