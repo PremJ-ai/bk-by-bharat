@@ -115,6 +115,10 @@ export default async function StorefrontHomePage() {
     console.error("Unable to load storefront categories from the catalog API:", categoriesResult.reason);
   }
   const featuredProduct = featured.items[0];
+  const heroProduct =
+    featured.items.find((product) => Boolean(product.videoUrl)) ||
+    newest.items.find((product) => Boolean(product.videoUrl)) ||
+    featuredProduct;
   const fabricProduct = await loadFeaturedFabric(featuredProduct);
   const fabricSpecifications = fabricProduct?.fabricSpecifications;
   const featuredError = featuredResult.status === "rejected";
@@ -125,7 +129,7 @@ export default async function StorefrontHomePage() {
       <AnnouncementBar />
       <SiteHeader />
       <main className="flex-1">
-        <CampaignHero product={featuredProduct} />
+        <CampaignHero product={heroProduct} />
         <MarqueeTicker />
 
         <section className="mx-auto max-w-[1440px] border-b border-border px-6 py-16 md:px-12 md:py-24">

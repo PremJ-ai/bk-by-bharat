@@ -13,11 +13,11 @@ export interface WhatsAppProvider {
     recipientPhone: string;
     templateName?: string;
     bodyText: string;
-  }): Promise<{ providerMessageId: string; status: "SENT" | "FAILED"; error?: string }>;
+  }): Promise<{ providerMessageId: string; status: "QUEUED" | "SENT" | "FAILED"; error?: string }>;
 }
 
 /**
- * Built-in Atelier Local WhatsApp Test Adapter.
+ * Built-in Atelier WhatsApp manual-handoff adapter.
  * Reliably logs and persists all outbound transactional messages in the PostgreSQL ledger
  * without requiring third-party Meta Business Manager credentials in test/offline environments.
  */
@@ -32,11 +32,11 @@ export class LocalAtelierWhatsAppProvider implements WhatsAppProvider {
     recipientPhone: string;
     templateName?: string;
     bodyText: string;
-  }): Promise<{ providerMessageId: string; status: "SENT" | "FAILED"; error?: string }> {
+  }): Promise<{ providerMessageId: string; status: "QUEUED"; error?: string }> {
     const providerMessageId = `wam-local-${Date.now()}-${crypto.randomBytes(6).toString("hex")}`;
     return {
       providerMessageId,
-      status: "SENT",
+      status: "QUEUED",
     };
   }
 }
@@ -130,7 +130,7 @@ export class WhatsAppService {
       isLiveConnected: this.provider.isLive(),
       instructions: this.provider.isLive()
         ? "Connected to Meta WhatsApp Cloud API."
-        : "Operating via Local Atelier Audit Adapter. Outbound messages are recorded in PostgreSQL and logged.",
+        : "WhatsApp Cloud API is not configured. Messages are queued in the order ledger; open the customer's WhatsApp chat and send them manually.",
     };
   }
 
@@ -191,7 +191,7 @@ export class WhatsAppService {
         recipientPhone,
         templateName,
         bodyText,
-        status: dispatchResult.status === "SENT" ? "SENT" : "FAILED",
+        status: dispatchResult.status,
         errorMessage: dispatchResult.error || null,
       },
     });
@@ -510,6 +510,50 @@ export class WhatsAppService {
   // ---------------------------------------------------------------------------
   // Outbound Notification Templates
   // ---------------------------------------------------------------------------
+
+  async notifyStoreOrderReceived(order: {
+    id: string;
+    orderNumber: string;
+    customerName: string;
+    customerWhatsApp: string;
+    recipientPhone: string;
+    address: string;
+    subtotalPaise: number;
+    items: Array<{
+      productName: string;
+      size: string;
+      color: string;
+      sku: string;
+      quantity: number;
+      lineTotalPaise: number;
+      imageUrl: string | null;
+    }>;
+  }) {
+    const itemLines = order.items.flatMap((item, index) => [
+      `${index + 1}. ${item.productName} | Size ${item.size} | ${item.color} | Qty ${item.quantity}`,
+      `SKU ${item.sku} | Line ₹${(item.lineTotalPaise / 100).toLocaleString("en-IN")}`,
+      item.imageUrl ? `Image: ${item.imageUrl}` : "",
+    ]).filter(Boolean);
+    const bodyText = [
+      "NEW WEBSITE ORDER — BK BY BHARAT",
+      `Order: ${order.orderNumber}`,
+      `Customer: ${order.customerName}`,
+      `Customer WhatsApp: ${order.customerWhatsApp}`,
+      "Delivery address:",
+      order.address,
+      "Items:",
+      ...itemLines,
+      `Items subtotal: ₹${(order.subtotalPaise / 100).toLocaleString("en-IN")}`,
+      "Review the order in Admin → Orders. Confirm stock, then issue the final invoice and payment QR.",
+    ].join("\n");
+
+    return this.sendOutboundMessage({
+      orderId: order.id,
+      recipientPhone: order.recipientPhone,
+      templateName: "store_order_handoff",
+      bodyText,
+    });
+  }
 
   async notifyOrderReceived(order: {
     id: string;

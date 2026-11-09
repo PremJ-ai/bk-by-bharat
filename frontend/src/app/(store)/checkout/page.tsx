@@ -87,6 +87,10 @@ export default function GuestCheckoutPage() {
 
     setLoading(true);
 
+    // Reserve a browser tab synchronously within the customer's click so popup blockers
+    // do not discard the later WhatsApp handoff after the API request completes.
+    const whatsappTab = window.open("about:blank", "_blank");
+
     try {
       // Clean and normalize WhatsApp phone
       const cleanPhone = whatsappNumber.replace(/[\s-]/g, "");
@@ -120,12 +124,42 @@ export default function GuestCheckoutPage() {
         items: checkoutItems,
       });
 
-      // Clear the shopping bag
+      // Open a prepared message to the configured store number only after PostgreSQL
+      // has accepted the order. wa.me cannot send on the customer's behalf; the customer
+      // reviews the draft and taps Send. Product images are included as public links.
+      const storeDigits = res.storeWhatsAppNumber?.replace(/\D/g, "") || "";
+      if (whatsappTab && storeDigits) {
+        const whatsappMessage = [
+          "NEW WEBSITE ORDER — BK BY BHARAT",
+          `Order: ${res.orderNumber}`,
+          `Customer: ${fullName.trim()}`,
+          `Customer WhatsApp: ${cleanPhone}`,
+          "Delivery address:",
+          addressLine1.trim(),
+          addressLine2.trim(),
+          `${city.trim()}, ${stateRegion.trim()} ${postalCode.trim()}, India`,
+          "Items:",
+          ...res.items.flatMap((item, index) => [
+            `${index + 1}. ${item.productName} | Size: ${item.size} | Colour: ${item.color} | Qty: ${item.quantity}`,
+            `SKU: ${item.sku} | Fabric: ${item.material} | Unit: ${formatINR(item.unitPricePaise)} | Line: ${formatINR(item.lineTotalPaise)}`,
+            item.imageUrl ? `Product image: ${item.imageUrl}` : "",
+          ]),
+          `Items subtotal: ${formatINR(res.subtotalPaise)}`,
+          "Please confirm availability and share the final invoice and UPI QR payment instructions.",
+        ].filter(Boolean).join("\n");
+        whatsappTab.opener = null;
+        whatsappTab.location.href = `https://wa.me/${storeDigits}?text=${encodeURIComponent(whatsappMessage)}`;
+      } else if (whatsappTab) {
+        whatsappTab.close();
+      }
+
+      // Clear the shopping bag only after order persistence succeeds.
       clearCart();
 
-      // Redirect to private confirmation screen with real guest token
+      // Keep the original tab on the private status / payment page.
       router.push(`/orders/confirmation/${res.guestStatusToken}`);
     } catch (error: unknown) {
+      if (whatsappTab && !whatsappTab.closed) whatsappTab.close();
       setErrorMessage(
         error instanceof ApiError
           ? error.message
@@ -167,7 +201,7 @@ export default function GuestCheckoutPage() {
             Guest Checkout &amp; Delivery
           </h1>
           <p className="text-muted text-sm leading-relaxed font-sans max-w-xl pt-1">
-            No account is required. Orders follow the existing invoice and manual payment-verification workflow. Automated WhatsApp Cloud API messaging is not enabled in this phase.
+            No account is needed. We save your order first, then prepare the order details for you to send to the atelier on WhatsApp.
           </p>
         </div>
 
@@ -206,7 +240,7 @@ export default function GuestCheckoutPage() {
                     1. Recipient &amp; WhatsApp Details
                   </h2>
                   <p className="text-xs text-muted font-sans mt-0.5">
-                    This number is collected for order-related contact. Automated WhatsApp Cloud API notifications are not enabled in this phase.
+                    Use a WhatsApp number where our team can reach you about payment and delivery.
                   </p>
                 </div>
 
@@ -406,12 +440,16 @@ export default function GuestCheckoutPage() {
                   </div>
                   <label htmlFor="whatsappConsent" className="text-xs text-ink leading-relaxed cursor-pointer select-none">
                     <span className="font-medium text-navy block mb-0.5">
-                      Consent to Order-Related Phone Contact *
+                      WhatsApp order updates *
                     </span>
-                    I consent to the atelier using this number for order-related contact. Automated WhatsApp Cloud API messages are not enabled in this phase, so this consent does not guarantee automated notifications. Guest checkout does not create an online customer account.
+                    I agree to receive messages about this order and its delivery on the number above. My order is saved in the store's order history before WhatsApp opens.
                   </label>
                 </div>
               </div>
+
+              <p className="text-[11px] leading-relaxed text-muted">
+                To cancel, contact the atelier with your order reference. Cancellation and refund requests are reviewed under the store policy and applicable consumer law; no blanket cancellation penalty is added at checkout.
+              </p>
 
               {/* Submit CTA */}
               <button
@@ -426,7 +464,7 @@ export default function GuestCheckoutPage() {
                   </>
                 ) : (
                   <>
-                    <span>Place Guest Order &mdash; {formatINR(subtotalPaise)}</span>
+                    <span>Order Now &mdash; {formatINR(subtotalPaise)}</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}

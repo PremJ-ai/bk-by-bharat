@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import argon2 from "argon2";
 import { adminAuthRepository, AdminAuthRepository } from "./admin-auth.repository.js";
-import { UnauthorizedError, ConflictError } from "../../lib/errors.js";
+import { UnauthorizedError, ConflictError, ValidationError } from "../../lib/errors.js";
 import { SESSION_TTL_MS } from "../../config/constants.js";
 import { hashSessionToken } from "../../middleware/authenticate.js";
 import type { AdminUser, AdminRole } from "@prisma/client";
@@ -45,6 +45,14 @@ export class AdminAuthService {
   }
 
   async bootstrapFirstAdmin(username: string, password: string): Promise<SafeAdminUserDTO> {
+    const normalizedEmail = username.toLowerCase().trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      throw new ValidationError("Administrator login must use a valid email address.");
+    }
+    if (password.length < 14 || password.length > 128) {
+      throw new ValidationError("Use an administrator password between 14 and 128 characters.");
+    }
+
     const existingCount = await this.repo.countAdmins();
     if (existingCount > 0) {
       throw new ConflictError("Bootstrap refused: An administrator already exists.");
@@ -127,6 +135,70 @@ export class AdminAuthService {
       sessionToken,
       expiresAt,
     };
+  }
+
+  async updateSecurity(
+    adminId: string,
+    input: { email: string; currentPassword: string; newPassword?: string },
+    ipAddress?: string
+  ): Promise<SafeAdminUserDTO> {
+    const admin = await this.repo.findById(adminId);
+    if (!admin || admin.status !== "ACTIVE") {
+      throw new UnauthorizedError("Administrator account is not active.");
+    }
+
+    if (!(await this.verifyPassword(admin.passwordHash, input.currentPassword))) {
+      await this.repo.createAuditEvent({
+        actorAdminId: admin.id,
+        action: "ADMIN_SECURITY_UPDATE_FAILED",
+        resourceType: "AdminUser",
+        resourceId: admin.id,
+        ipAddress,
+      });
+      throw new UnauthorizedError("Current password is incorrect.");
+    }
+
+    const email = input.email.toLowerCase().trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new ValidationError("Enter a valid administrator email address.");
+    }
+
+    const existing = await this.repo.findByUsername(email);
+    if (existing && existing.id !== admin.id) {
+      throw new ConflictError("That administrator email is already assigned to another account.");
+    }
+
+    let passwordHash: string | undefined;
+    if (input.newPassword) {
+      if (input.newPassword.length < 14 || input.newPassword.length > 128) {
+        throw new ValidationError("Use a new password between 14 and 128 characters.");
+      }
+      if (input.newPassword === input.currentPassword) {
+        throw new ValidationError("Choose a new password that is different from the current password.");
+      }
+      passwordHash = await this.hashPassword(input.newPassword);
+    }
+
+    const updated = await this.repo.updateAdminCredentials(admin.id, {
+      username: email,
+      passwordHash,
+    });
+
+    // Credential changes revoke every browser/device session; reauthentication is required.
+    await this.repo.revokeAllUserSessions(admin.id);
+    await this.repo.createAuditEvent({
+      actorAdminId: admin.id,
+      action: "ADMIN_SECURITY_UPDATED",
+      resourceType: "AdminUser",
+      resourceId: admin.id,
+      details: {
+        emailChanged: admin.username !== email,
+        passwordChanged: Boolean(passwordHash),
+      },
+      ipAddress,
+    });
+
+    return this.toDTO(updated);
   }
 
   async logout(sessionToken: string, adminId?: string, ipAddress?: string): Promise<void> {

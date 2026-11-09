@@ -18,6 +18,19 @@ export class AdminAuthRepository {
     return prisma.adminUser.count();
   }
 
+  async updateAdminCredentials(
+    id: string,
+    data: { username: string; passwordHash?: string }
+  ): Promise<AdminUser> {
+    return prisma.adminUser.update({
+      where: { id },
+      data: {
+        username: data.username.toLowerCase().trim(),
+        ...(data.passwordHash ? { passwordHash: data.passwordHash } : {}),
+      },
+    });
+  }
+
   async createAdminUser(data: {
     username: string;
     passwordHash: string;

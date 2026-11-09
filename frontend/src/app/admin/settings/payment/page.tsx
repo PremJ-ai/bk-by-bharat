@@ -193,8 +193,11 @@ export default function AdminPaymentSettingsPage() {
 
             <div>
               <label className="block uppercase tracking-caps text-muted font-medium mb-1.5">
-                Official Studio WhatsApp Number *
+                Store WhatsApp Number *
               </label>
+              <p className="mb-2 text-[10px] leading-relaxed text-muted">
+                Include country code, e.g. +91XXXXXXXXXX. This is the business number customers message with saved order details.
+              </p>
               <input
                 type="text"
                 value={whatsappNumber}

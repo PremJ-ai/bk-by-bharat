@@ -21,13 +21,13 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
   beforeAll(async () => {
     // 1. Create dedicated admin
     await prisma.adminUser.deleteMany({
-      where: { username: "commerce_admin_test" },
+      where: { username: "commerce_admin_test@store.local" },
     });
 
     const passwordHash = await argon2.hash("CommerceAdminPass123!");
     await prisma.adminUser.create({
       data: {
-        username: "commerce_admin_test",
+        username: "commerce_admin_test@store.local",
         passwordHash,
         role: "ADMIN",
         status: "ACTIVE",
@@ -38,7 +38,7 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     const loginRes = await request(app)
       .post("/api/v1/admin-auth/login")
       .send({
-        username: "commerce_admin_test",
+        username: "commerce_admin_test@store.local",
         password: "CommerceAdminPass123!",
       });
 
@@ -109,7 +109,7 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     }
 
     await prisma.adminUser.deleteMany({
-      where: { username: "commerce_admin_test" },
+      where: { username: "commerce_admin_test@store.local" },
     });
   });
 
@@ -195,6 +195,18 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
   });
 
   it("successfully creates a guest order in AWAITING_ADMIN_REVIEW with explicit consent and timestamp", async () => {
+    await prisma.storeSettings.upsert({
+      where: { id: "default" },
+      update: { whatsappNumber: "+919810012345" },
+      create: {
+        id: "default",
+        upiId: "bharatatelier@icici",
+        payeeName: "Bharat Atelier Private Limited",
+        paymentInstructions: "Scan the QR using a supported UPI app and include the order reference.",
+        whatsappNumber: "+919810012345",
+      },
+    });
+
     const res = await request(app)
       .post("/api/v1/orders/checkout")
       .send({
@@ -235,18 +247,26 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     expect(dbOrder?.items).toHaveLength(1);
     expect(dbOrder?.items[0].quantity).toBe(2);
 
-    // Verify outbound WhatsApp confirmation was logged
-    await expect
-      .poll(
-        async () => {
-          const message = await prisma.whatsAppMessage.findFirst({
-            where: { orderId: dbOrder!.id, templateName: "order_received" },
-          });
-          return message?.bodyText;
-        },
-        { timeout: 2000 },
-      )
-      .toContain(orderNumber);
+    // The database is authoritative: checkout saves the order and returns the
+    // configured destination plus item snapshots for a customer-initiated wa.me handoff.
+    expect(res.body.data.storeWhatsAppNumber).toBe("+919810012345");
+    expect(res.body.data.items).toHaveLength(1);
+    expect(res.body.data.items[0]).toMatchObject({
+      productName: "Test Tailored Camp Shirt",
+      sku: testVariantSku,
+      size: "M",
+      material: "Belgian Linen",
+      quantity: 2,
+      lineTotalPaise: 1700000,
+    });
+    expect(res.body.data.items[0].imageUrl).toBeNull();
+
+    // No mock outbound message may be reported as delivered: the customer
+    // reviews the WhatsApp draft and taps Send on their own device.
+    const handoff = await prisma.whatsAppMessage.findFirst({
+      where: { orderId: dbOrder!.id, templateName: "store_order_handoff" },
+    });
+    expect(handoff).toBeNull();
   });
 
   // ---------------------------------------------------------------------------

@@ -3,6 +3,8 @@ import request from "supertest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/db/prisma.js";
 import { adminAuthService } from "../src/modules/admin-auth/admin-auth.service.js";
+import { adminAuthRepository } from "../src/modules/admin-auth/admin-auth.repository.js";
+import { loginSchema } from "../src/modules/admin-auth/admin-auth.schemas.js";
 import { SESSION_COOKIE_NAME, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from "../src/config/constants.js";
 
 const app = createApp();
@@ -136,5 +138,58 @@ describe("Admin Authentication & Session Lifecycle", () => {
 
     expect(verifyRes.status).toBe(401);
     expect(verifyRes.body.error.message).toMatch(/revoked|not found|expired/i);
+  });
+
+  it("updates the administrator email and password, then revokes every active session", async () => {
+    const login = await request(app)
+      .post("/api/v1/admin-auth/login")
+      .send({ username: testUsername, password: testPassword });
+
+    expect(login.status).toBe(200);
+    const cookies = login.headers["set-cookie"] as string[];
+    const session = cookies.find((cookie) => cookie.startsWith(`${SESSION_COOKIE_NAME}=`))!;
+    const csrf = cookies.find((cookie) => cookie.startsWith(`${CSRF_COOKIE_NAME}=`))!;
+    const sessionValue = session.split(";")[0];
+    const csrfValue = csrf.split(";")[0];
+    const csrfTokenValue = login.body.meta.csrfToken;
+
+    const updatedEmail = "admin_updated@fashion.local";
+    const updatedPassword = "A-Much-Stronger-Passphrase-2026!";
+
+    const update = await request(app)
+      .put("/api/v1/admin-auth/security")
+      .set("Cookie", [sessionValue, csrfValue])
+      .set(CSRF_HEADER_NAME, csrfTokenValue)
+      .send({
+        email: updatedEmail,
+        confirmEmail: updatedEmail,
+        currentPassword: testPassword,
+        newPassword: updatedPassword,
+      });
+
+    expect(update.status).toBe(200);
+    expect(update.body.data).toMatchObject({
+      success: true,
+      email: updatedEmail,
+      reauthenticationRequired: true,
+    });
+
+    const oldSession = await request(app)
+      .get("/api/v1/admin-auth/session")
+      .set("Cookie", [sessionValue]);
+    expect(oldSession.status).toBe(401);
+
+    const oldEmailAdmin = await adminAuthRepository.findByUsername(testUsername);
+    const updatedAdmin = await adminAuthRepository.findByUsername(updatedEmail);
+    expect(oldEmailAdmin).toBeNull();
+    expect(updatedAdmin).toBeDefined();
+    expect(await adminAuthService.verifyPassword(updatedAdmin!.passwordHash, updatedPassword)).toBe(true);
+    expect(await adminAuthService.verifyPassword(updatedAdmin!.passwordHash, testPassword)).toBe(false);
+  });
+
+  it("rejects an invalid email identifier at the login schema boundary", () => {
+    expect(() =>
+      loginSchema.parse({ username: "not-an-email", password: testPassword })
+    ).toThrow();
   });
 });

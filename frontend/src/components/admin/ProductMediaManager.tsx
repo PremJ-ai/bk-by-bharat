@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/media";
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
+const VIDEO_TYPES = ["video/mp4", "video/webm"];
 const MAX_IMAGES = 4;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
@@ -152,9 +153,9 @@ export function ProductMediaManager({
     try {
       for (const [fileIndex, file] of files.entries()) {
         const isImage = IMAGE_TYPES.includes(file.type);
-        const isVideo = file.type === "video/mp4";
+        const isVideo = VIDEO_TYPES.includes(file.type);
         if (!isImage && !isVideo) {
-          throw new Error("Choose JPEG, PNG, WebP, AVIF, or MP4 media.");
+          throw new Error("Choose JPEG, PNG, WebP, AVIF, MP4 or WebM media.");
         }
         const replacingItem = replacingIndex === null ? undefined : currentItems[replacingIndex];
         if (replacingIndex !== null && replacingItem?.mediaType !== (isVideo ? "VIDEO" : "IMAGE")) {
@@ -264,8 +265,8 @@ export function ProductMediaManager({
     replacementIndexRef.current = replaceIndex;
     if (inputRef.current) {
       inputRef.current.accept = replaceIndex === null
-        ? [...IMAGE_TYPES, "video/mp4"].join(",")
-        : items[replaceIndex]?.mediaType === "VIDEO" ? "video/mp4" : IMAGE_TYPES.join(",");
+        ? [...IMAGE_TYPES, ...VIDEO_TYPES].join(",")
+        : items[replaceIndex]?.mediaType === "VIDEO" ? VIDEO_TYPES.join(",") : IMAGE_TYPES.join(",");
       inputRef.current.multiple = replaceIndex === null;
       inputRef.current.click();
     }
@@ -277,7 +278,7 @@ export function ProductMediaManager({
         <div>
           <h2 className="font-display text-lg text-ink">Product Gallery</h2>
           <p className="mt-1 text-[11px] text-muted">
-            Four images and one MP4 video (3–5 seconds). Image size limit: 10 MB; video: 50 MB.
+            Up to four images and one short MP4 or WebM clip (3–5 seconds). Images up to 10 MB; video up to 50 MB.
           </p>
         </div>
         <button
@@ -298,7 +299,7 @@ export function ProductMediaManager({
               AI image studio · Hugging Face
             </h3>
             <p className="mt-1 text-[10px] leading-relaxed text-[#79668e]">
-              Generate a product-image draft from the garment details. The image is saved to Supabase and added below for review.
+              Create a product visual from the garment details. Generated images are saved to the product gallery as drafts.
             </p>
           </div>
           <span className="rounded-full border border-[#e7d7f4] bg-white px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-[#76538f]">
@@ -306,7 +307,7 @@ export function ProductMediaManager({
           </span>
         </div>
         <label className="block space-y-1 text-[10px] font-semibold uppercase tracking-wide text-[#79668e]">
-          Optional creative direction
+          Creative direction (optional)
           <textarea
             value={aiPrompt}
             onChange={(event) => setAiPrompt(event.target.value)}
@@ -318,12 +319,12 @@ export function ProductMediaManager({
         </label>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-[9px] text-[#79668e]">
-            Uses product name, category and material as prompt context · 1024 × 1280
+            Product name and fabric are included automatically · Portrait 4:5
           </p>
           <button
             type="button"
             onClick={generateAiImage}
-            disabled={aiGenerating || uploading || productName.trim().length < 2 || material.trim().length < 2 || items.filter((item) => item.mediaType === "IMAGE").length >= MAX_IMAGES}
+            disabled={aiGenerating || uploading || items.filter((item) => item.mediaType === "IMAGE").length >= MAX_IMAGES}
             className="inline-flex min-h-9 items-center gap-2 rounded-md bg-[#65418a] px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-white transition hover:bg-[#50316e] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {aiGenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}

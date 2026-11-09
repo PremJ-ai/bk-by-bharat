@@ -193,17 +193,14 @@ export class CommerceService {
       return newOrder;
     });
 
-    // 5. Send asynchronous WhatsApp confirmation
-    this.whatsappService
-      .notifyOrderReceived({
-        id: order.id,
-        orderNumber: order.orderNumber,
-        customerName: order.customerName,
-        whatsappNumber: order.whatsappNumber,
-        subtotalPaise: order.subtotalPaise,
-        rawToken,
-      })
-      .catch(() => {});
+    // Resolve the store's customer-facing WhatsApp number for the post-save wa.me handoff.
+    const storeSettings = await this.getStoreSettings();
+    const storeWhatsAppDigits = (storeSettings.whatsappNumber || "").replace(/\D/g, "");
+    const isPlaceholderStoreNumber = [
+      "919876543210", "910000000000", "911234567890",
+    ].includes(storeWhatsAppDigits);
+    const storeWhatsAppNumber =
+      !storeWhatsAppDigits || isPlaceholderStoreNumber ? null : storeSettings.whatsappNumber;
 
     return {
       orderNumber: order.orderNumber,
@@ -213,6 +210,18 @@ export class CommerceService {
       totalPaise: order.totalPaise,
       currency: order.currency,
       itemsCount: order.items.length,
+      items: order.items.map((item) => ({
+        productName: item.productName,
+        sku: item.sku,
+        size: item.size,
+        color: item.color,
+        material: item.material,
+        unitPricePaise: item.unitPricePaise,
+        quantity: item.quantity,
+        lineTotalPaise: item.lineTotalPaise,
+        imageUrl: item.imageUrl,
+      })),
+      storeWhatsAppNumber,
       whatsappConsent: order.whatsappConsent,
       whatsappConsentAt: order.whatsappConsentAt,
     };
@@ -254,6 +263,12 @@ export class CommerceService {
     }
 
     const currentInvoice = order.invoices[0] || null;
+    const storeWhatsAppDigits = (settings.whatsappNumber || "").replace(/\D/g, "");
+    const storeWhatsAppNumber =
+      !storeWhatsAppDigits ||
+      ["919876543210", "910000000000", "911234567890"].includes(storeWhatsAppDigits)
+        ? null
+        : settings.whatsappNumber;
     const finalAmountInr = (order.totalPaise / 100).toFixed(2);
     const hasValidPaymentSettings = !this.isPlaceholderStoreSettings(settings);
     const upiDeepLink = hasValidPaymentSettings
@@ -351,6 +366,7 @@ export class CommerceService {
         paymentInstructions: settings.paymentInstructions,
         upiDeepLink,
         qrImageUrl: settings.qrImageUrl || null,
+        storeWhatsAppNumber,
       },
     };
   }

@@ -55,6 +55,15 @@ export default function AdminProductsPage() {
   };
 
   const handleTogglePublish = async (id: string, currentStatus: string) => {
+    const selectedProduct = products.find((product) => product.id === id);
+    if (
+      currentStatus !== "PUBLISHED" &&
+      selectedProduct?.isFixture &&
+      !window.confirm("This is a SAMPLE product with demo copy, imagery and test stock. Verify the real garment, price, images, size run and inventory before publishing. Publish this sample anyway?")
+    ) {
+      return;
+    }
+
     try {
       setActionId(id);
       setErrorMessage(null);
@@ -208,7 +217,12 @@ export default function AdminProductsPage() {
                         <span className="font-medium text-ink block leading-snug">
                           {product.name}
                         </span>
-                        <span className="text-[11px] text-muted">{product.material}</span>
+                        {product.isFixture && (
+                          <span className="mt-1 inline-flex rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-800">
+                            Sample · verify before publishing
+                          </span>
+                        )}
+                        <span className="mt-0.5 block text-[11px] text-muted">{product.material}</span>
                       </div>
                     </td>
 

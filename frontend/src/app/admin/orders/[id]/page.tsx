@@ -11,6 +11,7 @@ import {
   shipAdminOrder,
   decideAdminCancellation,
   processAdminRefund,
+  getStorePaymentSettings,
 } from "@/lib/api/commerce";
 import {
   ArrowLeft,
@@ -39,6 +40,7 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
   const orderId = resolvedParams.id;
 
   const [order, setOrder] = useState<any>(null);
+  const [storePaymentSettings, setStorePaymentSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
@@ -95,6 +97,12 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
   useEffect(() => {
     loadOrderDetail();
   }, [orderId]);
+
+  useEffect(() => {
+    getStorePaymentSettings()
+      .then(setStorePaymentSettings)
+      .catch((err) => console.error("Store WhatsApp/payment settings are unavailable", err));
+  }, []);
 
   const handleIssueInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -278,6 +286,31 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
   const isShipped = order.status === "SHIPPED" || order.status === "DELIVERED";
 
   const currentInvoice = order.invoices?.find((inv: any) => inv.isCurrent) || order.invoices?.[0];
+  const customerWhatsAppDigits = String(order.whatsappNumber || "").replace(/\D/g, "");
+  const paymentUpiLink = currentInvoice && storePaymentSettings?.upiId
+    ? `upi://pay?pa=${encodeURIComponent(storePaymentSettings.upiId)}&pn=${encodeURIComponent(storePaymentSettings.payeeName || "")}&am=${(currentInvoice.totalPaise / 100).toFixed(2)}&cu=INR&tn=${encodeURIComponent(order.orderNumber)}`
+    : "";
+  const paymentQrUrl = storePaymentSettings?.qrImageUrl ||
+    (paymentUpiLink ? `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(paymentUpiLink)}` : "");
+  const paymentWhatsAppUrl = customerWhatsAppDigits && currentInvoice && paymentQrUrl
+    ? `https://wa.me/${customerWhatsAppDigits}?text=${encodeURIComponent([
+        `Hello ${order.customerName}, your BK by Bharat invoice ${order.orderNumber} is ready.`,
+        `Amount payable: ${formatINR(currentInvoice.totalPaise)}`,
+        `UPI ID: ${storePaymentSettings.upiId}`,
+        `Payee: ${storePaymentSettings.payeeName}`,
+        `Payment QR: ${paymentQrUrl}`,
+        "Please include the order number in payment remarks and submit your UTR/payment proof through the order page.",
+      ].join("\n"))}`
+    : null;
+  const latestShipment = order.shipments?.[0];
+  const trackingWhatsAppUrl = customerWhatsAppDigits && latestShipment
+    ? `https://wa.me/${customerWhatsAppDigits}?text=${encodeURIComponent([
+        `Hello ${order.customerName}, your order ${order.orderNumber} has been dispatched.`,
+        `Carrier: ${latestShipment.carrier}`,
+        `Tracking/AWB: ${latestShipment.trackingNumber}`,
+        latestShipment.trackingUrl ? `Track here: ${latestShipment.trackingUrl}` : "",
+      ].filter(Boolean).join("\\n"))}`
+    : null;
 
   const calcSubtotal = order.subtotalPaise;
   const calcShipping = (parseInt(shippingRupees, 10) || 0) * 100;
@@ -311,14 +344,49 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={loadOrderDetail}
-          className="inline-flex items-center space-x-2 bg-surface border border-border px-3.5 py-1.5 text-xs uppercase tracking-caps font-semibold text-ink hover:border-gold transition-colors"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>Sync Order</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {paymentWhatsAppUrl && (
+            <a
+              href={paymentWhatsAppUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded bg-[#16845b] px-3.5 py-2 text-[10px] font-semibold uppercase tracking-caps text-white hover:bg-[#116b49]"
+            >
+              <MessageSquare className="h-3.5 w-3.5" /> Open WhatsApp payment request
+            </a>
+          )}
+          {paymentQrUrl && (
+            <a
+              href={paymentQrUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded border border-border bg-surface px-3.5 py-2 text-[10px] font-semibold uppercase tracking-caps text-ink hover:border-gold"
+            >
+              <Eye className="h-3.5 w-3.5" /> Open QR image
+            </a>
+          )}
+          {trackingWhatsAppUrl && (
+            <a
+              href={trackingWhatsAppUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded bg-[#16845b] px-3.5 py-2 text-[10px] font-semibold uppercase tracking-caps text-white hover:bg-[#116b49]"
+            >
+              <Truck className="h-3.5 w-3.5" /> Send tracking
+            </a>
+          )}
+          <button
+            type="button"
+            onClick={loadOrderDetail}
+            className="inline-flex items-center space-x-2 bg-surface border border-border px-3.5 py-1.5 text-xs uppercase tracking-caps font-semibold text-ink hover:border-gold transition-colors"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Sync Order</span>
+          </button>
+          <p className="basis-full text-[10px] leading-relaxed text-muted">
+            WhatsApp opens a prepared message for you to review and send. Payment QR is shared as a link; this does not send an automated WhatsApp message or media attachment.
+          </p>
+        </div>
       </div>
 
       {feedback && (
@@ -368,14 +436,26 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
             </h2>
             <div className="divide-y divide-border/60">
               {order.items.map((item: any) => (
-                <div key={item.id} className="py-3 first:pt-0 last:pb-0 flex justify-between items-center text-xs">
-                  <div>
-                    <h4 className="font-medium text-ink text-sm">{item.productName}</h4>
-                    <p className="text-muted text-[11px] mt-0.5 font-mono">
-                      SKU: {item.sku} &middot; Size {item.size} &middot; Qty: {item.quantity}
-                    </p>
+                <div key={item.id} className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex min-w-0 items-center gap-3">
+                    {item.imageUrl ? (
+                      <img
+                        src={item.imageUrl}
+                        alt={item.productName}
+                        loading="lazy"
+                        className="h-16 w-12 shrink-0 border border-border bg-surface-muted object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-16 w-12 shrink-0 items-center justify-center border border-border bg-surface-muted text-[9px] text-muted">No image</div>
+                    )}
+                    <div className="min-w-0">
+                      <h4 className="font-medium text-ink text-sm">{item.productName}</h4>
+                      <p className="mt-0.5 text-[11px] text-muted font-mono">
+                        SKU: {item.sku} · Size {item.size} · Qty: {item.quantity}
+                      </p>
+                    </div>
                   </div>
-                  <span className="font-mono font-semibold text-ink tabular-nums text-sm">
+                  <span className="shrink-0 font-mono text-sm font-semibold tabular-nums text-ink">
                     {formatINR(item.lineTotalPaise)}
                   </span>
                 </div>
@@ -805,6 +885,9 @@ export default function AdminOrderDetailPage({ params }: AdminOrderDetailPagePro
               </div>
 
               <form onSubmit={handleProcessRefund} className="space-y-3">
+                <p className="text-[10px] leading-relaxed text-muted">
+                  For an approved cancellation, enter the net refund after deducting only documented, non-recoverable costs already incurred (for example, completed alterations or courier charges). Tell the customer the itemised amount before processing; do not apply an arbitrary penalty.
+                </p>
                 <div>
                   <label className="text-[11px] uppercase tracking-caps text-muted block mb-1">
                     Refund Amount (INR) *
