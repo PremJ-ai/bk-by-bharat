@@ -13,6 +13,15 @@ import {
   ServiceUnavailableError,
 } from "../../lib/errors.js";
 import { WhatsAppService } from "../whatsapp/whatsapp.service.js";
+
+function normalizeWhatsAppNumber(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length < 8 || digits.length > 15) {
+    throw new BadRequestError("Valid WhatsApp contact number with country code is required.");
+  }
+  return `+${digits}`;
+}
+
 import { SupabasePrivateStorage } from "../storage/supabase-private-storage.js";
 import type {
   GuestCheckoutInput,
@@ -167,7 +176,7 @@ export class CommerceService {
           paymentStatus: "NOT_REQUESTED",
           fulfillmentStatus: "UNFULFILLED",
           customerName: input.customerName,
-          whatsappNumber: input.whatsappNumber,
+          whatsappNumber: normalizeWhatsAppNumber(input.whatsappNumber),
           email: input.email || null,
           addressLine1: input.addressLine1,
           addressLine2: input.addressLine2 || null,

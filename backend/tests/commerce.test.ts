@@ -211,7 +211,7 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
       .post("/api/v1/orders/checkout")
       .send({
         customerName: "Aarav Sharma",
-        whatsappNumber: "+919876543210",
+        whatsappNumber: "919876543210",
         email: "aarav@atelier.example",
         addressLine1: "42 Lodhi Estate",
         addressLine2: "Apartment 4B",
@@ -241,6 +241,7 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     expect(dbOrder).toBeDefined();
     orderId = dbOrder!.id;
     expect(dbOrder?.customerName).toBe("Aarav Sharma");
+    expect(dbOrder?.whatsappNumber).toBe("+919876543210");
     expect(dbOrder?.whatsappConsent).toBe(true);
     expect(dbOrder?.whatsappConsentAt).toBeInstanceOf(Date);
     expect(Math.abs(dbOrder!.whatsappConsentAt!.getTime() - dbOrder!.createdAt.getTime())).toBeLessThan(10000);
@@ -382,6 +383,53 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     expect(variantAfter?.stock).toBe(10); // Original stock unchanged until verified paid
   });
 
+  it("issues an order-scoped signed storage ticket before accepting payment-proof metadata", async () => {
+    const previousFetch = globalThis.fetch;
+    const previousUrl = process.env.SUPABASE_URL;
+    const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const previousBucket = process.env.PAYMENT_PROOFS_BUCKET;
+    let requestedUrl = "";
+    let requestedInit: RequestInit | undefined;
+
+    process.env.SUPABASE_URL = "https://storage-test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "private-test-service-key";
+    process.env.PAYMENT_PROOFS_BUCKET = "payment-proofs";
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      requestedUrl = String(input);
+      requestedInit = init;
+      return new Response(JSON.stringify({
+        url: "/object/upload/sign/payment-proofs/orders/" + orderId + "/proofs/receipt.png?token=temporary-signed-token",
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }) as typeof fetch;
+
+    try {
+      const res = await request(app)
+        .post("/api/v1/orders/payment-proof/upload-url")
+        .send({ token: guestToken, mimeType: "image/png", fileSizeBytes: 2048 });
+
+      expect(res.status).toBe(200);
+      expect(requestedUrl).toContain("/object/upload/sign/payment-proofs/orders/");
+      expect(requestedUrl).toContain(orderId);
+      expect(requestedInit?.method).toBe("POST");
+      expect(new Headers(requestedInit?.headers).get("Authorization")).toBe("Bearer private-test-service-key");
+      expect(res.body.data.storageKey).toContain("orders/" + orderId + "/proofs/");
+      expect(res.body.data.storageKey.endsWith(".png")).toBe(true);
+      expect(res.body.data.signedUploadUrl).toContain("temporary-signed-token");
+
+      const invalidToken = await request(app)
+        .post("/api/v1/orders/payment-proof/upload-url")
+        .send({ token: "invalid_guest_token_1234567890", mimeType: "image/png", fileSizeBytes: 2048 });
+      expect(invalidToken.status).toBe(404);
+    } finally {
+      globalThis.fetch = previousFetch;
+      if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+      else process.env.SUPABASE_URL = previousUrl;
+      if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+      else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+      if (previousBucket === undefined) delete process.env.PAYMENT_PROOFS_BUCKET;
+      else process.env.PAYMENT_PROOFS_BUCKET = previousBucket;
+    }
+  });
   // ---------------------------------------------------------------------------
   // 4. Payment Proof Submission & Protected Retrieval
   // ---------------------------------------------------------------------------
