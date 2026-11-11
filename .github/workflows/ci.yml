@@ -67,5 +67,5 @@ jobs:
       - name: Build all workspaces
         run: npm run build --workspaces
 
-      - name: Run backend integration tests
-        run: npm run test --workspace=backend
+      - name: Run frontend and backend test suites
+        run: npm run test --workspaces
