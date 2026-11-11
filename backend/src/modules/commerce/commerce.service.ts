@@ -15,7 +15,7 @@ import {
 import { WhatsAppService } from "../whatsapp/whatsapp.service.js";
 
 function normalizeWhatsAppNumber(value: string): string {
-  const digits = value.replace(/\\D/g, "");
+  const digits = value.replace(/\D/g, "");
   if (digits.length < 8 || digits.length > 15) {
     throw new BadRequestError("Valid WhatsApp contact number with country code is required.");
   }
