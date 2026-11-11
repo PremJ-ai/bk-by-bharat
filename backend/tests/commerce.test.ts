@@ -413,7 +413,7 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
       expect(requestedInit?.method).toBe("POST");
       expect(new Headers(requestedInit?.headers).get("Authorization")).toBe("Bearer private-test-service-key");
       expect(res.body.data.storageKey).toContain("orders/" + orderId + "/proofs/");
-      expect(res.body.data.storageKey).toMatch(/\\.png$/);
+      expect(res.body.data.storageKey.endsWith(".png")).toBe(true);
       expect(res.body.data.signedUploadUrl).toContain("temporary-signed-token");
 
       const invalidToken = await request(app)
