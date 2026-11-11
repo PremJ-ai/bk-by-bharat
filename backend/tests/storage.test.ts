@@ -20,6 +20,7 @@ function restoreEnvironment() {
 describe("Supabase private payment-proof storage", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     restoreEnvironment();
   });
 
