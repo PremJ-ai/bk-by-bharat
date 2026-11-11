@@ -211,7 +211,7 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
       .post("/api/v1/orders/checkout")
       .send({
         customerName: "Aarav Sharma",
-        whatsappNumber: "+919876543210",
+        whatsappNumber: "919876543210",
         email: "aarav@atelier.example",
         addressLine1: "42 Lodhi Estate",
         addressLine2: "Apartment 4B",
@@ -241,6 +241,7 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     expect(dbOrder).toBeDefined();
     orderId = dbOrder!.id;
     expect(dbOrder?.customerName).toBe("Aarav Sharma");
+    expect(dbOrder?.whatsappNumber).toBe("+919876543210");
     expect(dbOrder?.whatsappConsent).toBe(true);
     expect(dbOrder?.whatsappConsentAt).toBeInstanceOf(Date);
     expect(Math.abs(dbOrder!.whatsappConsentAt!.getTime() - dbOrder!.createdAt.getTime())).toBeLessThan(10000);
