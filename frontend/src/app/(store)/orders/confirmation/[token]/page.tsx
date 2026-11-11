@@ -14,6 +14,7 @@ import {
   cancelGuestOrder,
   type GuestOrderStatusModel,
 } from "@/lib/api/commerce";
+import { uploadFileToSignedStorage } from "@/lib/api/signed-storage-upload";
 import {
   CheckCircle,
   MessageSquare,
