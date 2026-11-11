@@ -383,6 +383,446 @@ describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () =>
     expect(variantAfter?.stock).toBe(10); // Original stock unchanged until verified paid
   });
 
+  it("issues an order-scoped signed storage ticket before accepting payment-proof metadata", async () => {
+    const previousFetch = globalThis.fetch;
+    const previousUrl = process.env.SUPABASE_URL;
+    const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const previousBucket = process.env.PAYMENT_PROOFS_BUCKET;
+    let requestedUrl = "";
+    let requestedInit: RequestInit | undefined;
+
+    process.env.SUPABASE_URL = "https://storage-test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "private-test-service-key";
+    process.env.PAYMENT_PROOFS_BUCKET = "payment-proofs";
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      requestedUrl = String(input);
+      requestedInit = init;
+      return new Response(JSON.stringify({
+        url: `/object/upload/sign/payment-proofs/orders/${orderId}/proofs/receipt.png?token=temporary-signed-token`,
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }) as typeof fetch;
+
+    try {
+      const res = await request(app)
+        .post("/api/v1/orders/payment-proof/upload-url")
+        .send({
+          token: guestToken,
+          mimeType: "image/png",
+          fileSizeBytes: 2048,
+        });
+
+      expect(res.status).toBe(200);
+      expect(requestedUrl).toContain("/object/upload/sign/payment-proofs/orders/");
+      expect(requestedUrl).toContain(orderId);
+      expect(requestedInit?.method).toBe("POST");
+      expect(new Headers(requestedInit?.headers).get("Authorization")).toBe("Bearer private-test-service-key");
+      expect(res.body.data.storageKey).toMatch(new RegExp(`^orders/${orderId}/proofs/.*\\.pngimport { describe, it, expect, beforeAll, afterAll } from "vitest";
+import request from "supertest";
+import { createApp } from "../src/app.js";
+import { prisma } from "../src/db/prisma.js";
+import argon2 from "argon2";
+import crypto from "node:crypto";
+import { CommerceService } from "../src/modules/commerce/commerce.service.js";
+
+const app = createApp();
+
+describe("Milestone 6: Guest Commerce, Invoicing, QR & WhatsApp Workflow", () => {
+  let adminCookie: string;
+  let testVariantId: string;
+  let testVariantSku: string;
+  let testProductId: string;
+  let guestToken: string;
+  let orderNumber: string;
+  let orderId: string;
+  let expiryOrderId: string | undefined;
+
+  beforeAll(async () => {
+    // 1. Create dedicated admin
+    await prisma.adminUser.deleteMany({
+      where: { username: "commerce_admin_test@store.local" },
+    });
+
+    const passwordHash = await argon2.hash("CommerceAdminPass123!");
+    await prisma.adminUser.create({
+      data: {
+        username: "commerce_admin_test@store.local",
+        passwordHash,
+        role: "ADMIN",
+        status: "ACTIVE",
+      },
+    });
+
+    // 2. Login
+    const loginRes = await request(app)
+      .post("/api/v1/admin-auth/login")
+      .send({
+        username: "commerce_admin_test@store.local",
+        password: "CommerceAdminPass123!",
+      });
+
+    expect(loginRes.status).toBe(200);
+    const cookies = loginRes.headers["set-cookie"];
+    adminCookie = Array.isArray(cookies) ? cookies.join("; ") : cookies;
+
+    // 3. Create a test category, published product, and variant with 10 stock
+    const category =
+      (await prisma.category.findFirst({ where: { slug: "shirts" } })) ||
+      (await prisma.category.create({
+        data: { name: "Shirts", slug: "shirts" },
+      }));
+
+    const product = await prisma.product.create({
+      data: {
+        name: "Test Tailored Camp Shirt",
+        slug: `test-tailored-camp-shirt-${Date.now()}`,
+        material: "Belgian Linen",
+        description: "Test garment for commerce flows",
+        pricePaise: 850000, // ₹8,500
+        categoryId: category.id,
+        status: "PUBLISHED",
+        publishedAt: new Date(),
+      },
+    });
+    testProductId = product.id;
+
+    testVariantSku = `TEST-COMM-${Date.now()}-M`;
+    const variant = await prisma.productVariant.create({
+      data: {
+        productId: product.id,
+        sku: testVariantSku,
+        size: "M",
+        colorName: "Oatmeal",
+        stock: 10,
+        reservedStock: 0,
+        isActive: true,
+      },
+    });
+    testVariantId = variant.id;
+  });
+
+  afterAll(async () => {
+    // Clean up test order and dependencies
+    if (expiryOrderId) {
+      await prisma.whatsAppMessage.deleteMany({ where: { orderId: expiryOrderId } });
+      await prisma.paymentProof.deleteMany({ where: { orderId: expiryOrderId } });
+      await prisma.invoice.deleteMany({ where: { orderId: expiryOrderId } });
+      await prisma.orderItem.deleteMany({ where: { orderId: expiryOrderId } });
+      await prisma.auditEvent.deleteMany({ where: { resourceType: "Order", resourceId: expiryOrderId } });
+      await prisma.order.deleteMany({ where: { id: expiryOrderId } });
+    }
+
+    if (orderId) {
+      await prisma.whatsAppMessage.deleteMany({ where: { orderId } });
+      await prisma.paymentProof.deleteMany({ where: { orderId } });
+      await prisma.shipment.deleteMany({ where: { orderId } });
+      await prisma.invoice.deleteMany({ where: { orderId } });
+      await prisma.cancellationRequest.deleteMany({ where: { orderId } });
+      await prisma.orderItem.deleteMany({ where: { orderId } });
+      await prisma.order.deleteMany({ where: { id: orderId } });
+    }
+
+    if (testProductId) {
+      await prisma.productVariant.deleteMany({ where: { productId: testProductId } });
+      await prisma.product.deleteMany({ where: { id: testProductId } });
+    }
+
+    await prisma.adminUser.deleteMany({
+      where: { username: "commerce_admin_test@store.local" },
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // 1. Guest Checkout Flow & WhatsApp Consent Verification
+  // ---------------------------------------------------------------------------
+  it("rejects guest checkout when WhatsApp consent is explicitly false", async () => {
+    const res = await request(app)
+      .post("/api/v1/orders/checkout")
+      .send({
+        customerName: "Aarav Sharma",
+        whatsappNumber: "+919876543210",
+        addressLine1: "42 Lodhi Estate",
+        city: "New Delhi",
+        stateRegion: "Delhi",
+        postalCode: "110003",
+        whatsappConsent: false,
+        items: [{ variantId: testVariantId, quantity: 1 }],
+      });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body.error)).toContain("WhatsApp");
+  });
+
+  it("rejects guest checkout when WhatsApp consent field is missing", async () => {
+    const res = await request(app)
+      .post("/api/v1/orders/checkout")
+      .send({
+        customerName: "Aarav Sharma",
+        whatsappNumber: "+919876543210",
+        addressLine1: "42 Lodhi Estate",
+        city: "New Delhi",
+        stateRegion: "Delhi",
+        postalCode: "110003",
+        // whatsappConsent omitted
+        items: [{ variantId: testVariantId, quantity: 1 }],
+      });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body.error)).toContain("WhatsApp");
+  });
+
+  it("ensures consent timestamp is null when explicit consent is not recorded", async () => {
+    const rawToken = "test_raw_token_no_consent_" + Date.now();
+    const guestTokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const testOrder = await prisma.order.create({
+      data: {
+        orderNumber: `ORD-TEST-NOCONSENT-${Date.now()}`,
+        customerName: "Offline Patron",
+        whatsappNumber: "+919876543210",
+        addressLine1: "42 Lodhi Estate",
+        city: "New Delhi",
+        stateRegion: "Delhi",
+        postalCode: "110003",
+        whatsappConsent: false,
+        whatsappConsentAt: null,
+        guestTokenHash,
+        subtotalPaise: 500000,
+        totalPaise: 500000,
+      },
+    });
+
+    expect(testOrder.whatsappConsent).toBe(false);
+    expect(testOrder.whatsappConsentAt).toBeNull();
+    await prisma.order.delete({ where: { id: testOrder.id } });
+  });
+
+  it("rejects guest checkout with invalid WhatsApp number format", async () => {
+    const res = await request(app)
+      .post("/api/v1/orders/checkout")
+      .send({
+        customerName: "Aarav Sharma",
+        whatsappNumber: "invalid-phone",
+        addressLine1: "42 Lodhi Estate",
+        city: "New Delhi",
+        stateRegion: "Delhi",
+        postalCode: "110003",
+        whatsappConsent: true,
+        items: [{ variantId: testVariantId, quantity: 1 }],
+      });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("successfully creates a guest order in AWAITING_ADMIN_REVIEW with explicit consent and timestamp", async () => {
+    await prisma.storeSettings.upsert({
+      where: { id: "default" },
+      update: { whatsappNumber: "+919810012345" },
+      create: {
+        id: "default",
+        upiId: "bharatatelier@icici",
+        payeeName: "Bharat Atelier Private Limited",
+        paymentInstructions: "Scan the QR using a supported UPI app and include the order reference.",
+        whatsappNumber: "+919810012345",
+      },
+    });
+
+    const res = await request(app)
+      .post("/api/v1/orders/checkout")
+      .send({
+        customerName: "Aarav Sharma",
+        whatsappNumber: "919876543210",
+        email: "aarav@atelier.example",
+        addressLine1: "42 Lodhi Estate",
+        addressLine2: "Apartment 4B",
+        city: "New Delhi",
+        stateRegion: "Delhi",
+        postalCode: "110003",
+        country: "India",
+        deliveryNotes: "Deliver during atelier daylight hours",
+        whatsappConsent: true,
+        items: [{ variantId: testVariantId, quantity: 2 }],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.orderNumber).toMatch(/^ORD-2026-\d+$/);
+    expect(res.body.data.guestStatusToken).toBeDefined();
+    expect(res.body.data.status).toBe("AWAITING_ADMIN_REVIEW");
+    expect(res.body.data.subtotalPaise).toBe(1700000); // 2 * 850000
+
+    guestToken = res.body.data.guestStatusToken;
+    orderNumber = res.body.data.orderNumber;
+
+    // Verify order in database and timestamp consistency
+    const dbOrder = await prisma.order.findUnique({
+      where: { orderNumber },
+      include: { items: true },
+    });
+    expect(dbOrder).toBeDefined();
+    orderId = dbOrder!.id;
+    expect(dbOrder?.customerName).toBe("Aarav Sharma");
+    expect(dbOrder?.whatsappNumber).toBe("+919876543210");
+    expect(dbOrder?.whatsappConsent).toBe(true);
+    expect(dbOrder?.whatsappConsentAt).toBeInstanceOf(Date);
+    expect(Math.abs(dbOrder!.whatsappConsentAt!.getTime() - dbOrder!.createdAt.getTime())).toBeLessThan(10000);
+    expect(dbOrder?.items).toHaveLength(1);
+    expect(dbOrder?.items[0].quantity).toBe(2);
+
+    // The database is authoritative: checkout saves the order and returns the
+    // configured destination plus item snapshots for a customer-initiated wa.me handoff.
+    expect(res.body.data.storeWhatsAppNumber).toBe("+919810012345");
+    expect(res.body.data.items).toHaveLength(1);
+    expect(res.body.data.items[0]).toMatchObject({
+      productName: "Test Tailored Camp Shirt",
+      sku: testVariantSku,
+      size: "M",
+      material: "Belgian Linen",
+      quantity: 2,
+      lineTotalPaise: 1700000,
+    });
+    expect(res.body.data.items[0].imageUrl).toBeNull();
+
+    // No mock outbound message may be reported as delivered: the customer
+    // reviews the WhatsApp draft and taps Send on their own device.
+    const handoff = await prisma.whatsAppMessage.findFirst({
+      where: { orderId: dbOrder!.id, templateName: "store_order_handoff" },
+    });
+    expect(handoff).toBeNull();
+  });
+
+  // ---------------------------------------------------------------------------
+  // 2. Private Status & Opaque Token
+  // ---------------------------------------------------------------------------
+  it("allows guest to retrieve status with valid opaque token", async () => {
+    const res = await request(app)
+      .get(`/api/v1/orders/status?token=${guestToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.orderNumber).toBe(orderNumber);
+    expect(res.body.data.status).toBe("AWAITING_ADMIN_REVIEW");
+    expect(res.body.data.items).toHaveLength(1);
+    expect(res.body.data.whatsappConsent).toBe(true);
+    expect(res.body.data.whatsappConsentAt).toBeDefined();
+  });
+
+  it("rejects guest status retrieval with an invalid token", async () => {
+    const res = await request(app)
+      .get("/api/v1/orders/status?token=00000000000000000000000000000000");
+
+    expect(res.status).toBe(404);
+  });
+
+  // ---------------------------------------------------------------------------
+  // 3. Store Settings & Invoicing Hardening
+  // ---------------------------------------------------------------------------
+  it("rejects issuing an invoice when store settings have placeholder credentials", async () => {
+    await prisma.storeSettings.upsert({
+      where: { id: "default" },
+      update: {
+        upiId: "atelier@bharat.upi",
+        payeeName: "Bharat Atelier New Delhi",
+        whatsappNumber: "+919876543210",
+      },
+      create: {
+        id: "default",
+        upiId: "atelier@bharat.upi",
+        payeeName: "Bharat Atelier New Delhi",
+        whatsappNumber: "+919876543210",
+      },
+    });
+
+    const res = await request(app)
+      .post(`/api/v1/admin/orders/${orderId}/invoice`)
+      .set("Cookie", adminCookie)
+      .send({
+        shippingPaise: 0,
+        taxPaise: 85000,
+        discountPaise: 50000,
+        paymentHoldHours: 24,
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/placeholder/i);
+  });
+
+  it("rejects configuring placeholder payment credentials through admin settings", async () => {
+    const res = await request(app)
+      .put("/api/v1/admin/settings/payment")
+      .set("Cookie", adminCookie)
+      .send({
+        upiId: "atelier@bharat.upi",
+        payeeName: "Bharat Atelier New Delhi",
+        paymentInstructions: "Scan QR using any UPI app to pay",
+        whatsappNumber: "+919876543210",
+        shippingDefaultPaise: 0,
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toMatch(/placeholder/i);
+  });
+
+  it("configures genuine business payment credentials through protected admin route", async () => {
+    const res = await request(app)
+      .put("/api/v1/admin/settings/payment")
+      .set("Cookie", adminCookie)
+      .send({
+        upiId: "bharatatelier@icici",
+        payeeName: "Bharat Atelier Private Limited",
+        paymentInstructions: "Scan QR using any UPI app (GPay, PhonePe, Paytm). Confirm order reference in remarks.",
+        whatsappNumber: "+919810012345",
+        shippingDefaultPaise: 0,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.upiId).toBe("bharatatelier@icici");
+    expect(res.body.data.payeeName).toBe("Bharat Atelier Private Limited");
+  });
+
+  it("allows admin to issue a final verified invoice and atomically reserve stock once settings are configured", async () => {
+    const res = await request(app)
+      .post(`/api/v1/admin/orders/${orderId}/invoice`)
+      .set("Cookie", adminCookie)
+      .send({
+        shippingPaise: 0, // Complimentary
+        taxPaise: 85000,  // ₹850 GST
+        discountPaise: 50000, // ₹500 First order courtesy
+        paymentHoldHours: 24,
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.data.invoice).toBeDefined();
+    expect(res.body.data.invoice.invoiceNumber).toMatch(/^INV-2026-/);
+    expect(res.body.data.updatedOrder.status).toBe("AWAITING_CUSTOMER_PAYMENT");
+    expect(res.body.data.updatedOrder.totalPaise).toBe(1735000); // 1700000 + 85000 - 50000
+
+    // Verify stock reservation on variant
+    const variantAfter = await prisma.productVariant.findUnique({
+      where: { id: testVariantId },
+    });
+    expect(variantAfter?.reservedStock).toBe(2);
+    expect(variantAfter?.stock).toBe(10); // Original stock unchanged until verified paid
+  });
+
+));
+      expect(res.body.data.signedUploadUrl).toContain("temporary-signed-token");
+
+      const invalidToken = await request(app)
+        .post("/api/v1/orders/payment-proof/upload-url")
+        .send({
+          token: "invalid_guest_token_1234567890",
+          mimeType: "image/png",
+          fileSizeBytes: 2048,
+        });
+      expect(invalidToken.status).toBe(404);
+    } finally {
+      globalThis.fetch = previousFetch;
+      if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+      else process.env.SUPABASE_URL = previousUrl;
+      if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+      else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+      if (previousBucket === undefined) delete process.env.PAYMENT_PROOFS_BUCKET;
+      else process.env.PAYMENT_PROOFS_BUCKET = previousBucket;
+    }
+  });
+
   // ---------------------------------------------------------------------------
   // 4. Payment Proof Submission & Protected Retrieval
   // ---------------------------------------------------------------------------
