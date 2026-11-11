@@ -1,6 +1,16 @@
 import crypto from "node:crypto";
 import { prisma } from "../../db/prisma.js";
 import { logger } from "../../lib/logger.js";
+import { BadRequestError } from "../../lib/errors.js";
+
+function normalizeWhatsAppNumber(value: string): string {
+  const digits = value.replace(/\\D/g, "");
+  if (digits.length < 8 || digits.length > 15) {
+    throw new BadRequestError("WhatsApp sender number is invalid.");
+  }
+  return `+${digits}`;
+}
+
 
 function getFrontendOrigin(): string {
   return (process.env.FRONTEND_ORIGIN || "http://localhost:3000").replace(/\/+$/, "");
@@ -245,7 +255,8 @@ export class WhatsAppService {
     messageText: string;
     providerMessageId?: string;
   }) {
-    const { senderPhone, messageText } = options;
+    const senderPhone = normalizeWhatsAppNumber(options.senderPhone);
+    const { messageText } = options;
     const providerMessageId =
       options.providerMessageId || `wam-in-${Date.now()}-${crypto.randomBytes(6).toString("hex")}`;
 
@@ -259,7 +270,8 @@ export class WhatsAppService {
 
     // Attempt association with latest order for this customer
     const latestOrder = await prisma.order.findFirst({
-      where: { whatsappNumber: senderPhone },
+      // Include unprefixed legacy rows while new checkout records are always stored in E.164 form.
+      where: { whatsappNumber: { in: [senderPhone, senderPhone.slice(1)] } },
       orderBy: { createdAt: "desc" },
       include: { items: true },
     });
@@ -313,7 +325,7 @@ export class WhatsAppService {
         where: { orderNumber: orderNumberArg },
         include: { items: true },
       });
-      if (found && found.whatsappNumber === senderPhone) {
+      if (found && normalizeWhatsAppNumber(found.whatsappNumber) === senderPhone) {
         targetOrder = found;
       }
     }
@@ -425,7 +437,7 @@ export class WhatsAppService {
       const found = await prisma.order.findUnique({
         where: { orderNumber: orderNumberArg },
       });
-      if (found && found.whatsappNumber === senderPhone) {
+      if (found && normalizeWhatsAppNumber(found.whatsappNumber) === senderPhone) {
         targetOrder = found;
       }
     }
