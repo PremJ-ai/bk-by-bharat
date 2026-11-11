@@ -4,7 +4,7 @@ import { logger } from "../../lib/logger.js";
 import { BadRequestError } from "../../lib/errors.js";
 
 function normalizeWhatsAppNumber(value: string): string {
-  const digits = value.replace(/\\D/g, "");
+  const digits = value.replace(/\D/g, "");
   if (digits.length < 8 || digits.length > 15) {
     throw new BadRequestError("WhatsApp sender number is invalid.");
   }
