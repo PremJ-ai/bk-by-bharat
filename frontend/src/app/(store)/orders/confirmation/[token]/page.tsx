@@ -155,26 +155,13 @@ export default function OrderConfirmationPage({ params }: ConfirmationPageProps)
         fileSizeBytes: proofFile.size,
       });
 
-      const uploadForm = new FormData();
-      uploadForm.append("cacheControl", "3600");
-      uploadForm.append("", proofFile);
       const supabasePublicKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      if (!supabasePublicKey) {
-        throw new Error("Payment screenshot uploads are not configured. Please contact the atelier.");
-      }
-
-      const uploadResponse = await fetch(uploadTicket.signedUploadUrl, {
-        method: "PUT",
-        headers: {
-          apikey: supabasePublicKey,
-          Authorization: "Bearer " + supabasePublicKey,
-          "x-upsert": "false",
-        },
-        body: uploadForm,
+      await uploadFileToSignedStorage({
+        signedUploadUrl: uploadTicket.signedUploadUrl,
+        file: proofFile,
+        mimeType: proofFile.type,
+        publicApiKey: supabasePublicKey || "",
       });
-      if (!uploadResponse.ok) {
-        throw new Error("The screenshot could not be uploaded to secure storage. Please try again.");
-      }
 
       await submitPaymentProof({
         token,
