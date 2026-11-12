@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useGSAP } from "@gsap/react";
-import { Menu, Search, ShoppingBag, Shield, X, ArrowUpRight } from "lucide-react";
+import { Menu, Search, ShoppingBag, X, ArrowUpRight } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { getStorefrontProducts } from "@/lib/api/catalog";
 import type { ProductViewModel } from "@/components/product/product.types";
@@ -234,15 +234,6 @@ export function SiteHeader() {
               </div>
             )}
           </form>
-
-          <Link
-            href="/admin"
-            aria-label="Staff Administration"
-            title="Administrator Portal"
-            className="rounded-full p-2 text-[#557466] transition-colors hover:bg-[#e9f0e9] hover:text-[#315c4c] focus:outline-none focus:ring-2 focus:ring-[#6e9886]/30"
-          >
-            <Shield className="h-[17px] w-[17px]" />
-          </Link>
 
           <button
             type="button"

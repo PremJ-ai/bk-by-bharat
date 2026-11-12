@@ -22,7 +22,7 @@ export function AnnouncementBar() {
       className="bg-navy text-canvas text-xs uppercase tracking-caps py-2.5 px-4 flex items-center justify-between border-b border-navy-strong select-none"
     >
       <div className="flex-1 text-center font-medium">
-        <span>Thoughtful pieces from Bharat Atelier &middot; Explore the current collection</span>
+        <span>BK by Bharat · Considered menswear, refined fabrics and thoughtful tailoring</span>
       </div>
       <button
         type="button"
