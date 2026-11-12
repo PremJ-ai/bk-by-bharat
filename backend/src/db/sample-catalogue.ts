@@ -124,7 +124,7 @@ const products = [
   }
 ] as const;
 
-async function main() {
+export async function seedAdditionalCatalogue() {
   const categories = [
     { slug:"shirts", name:"Shirts", description:"Linen, Oxford, poplin and textured shirts for work and weekend dressing.", displayOrder:1 },
     { slug:"trousers", name:"Formal Pants", description:"Tailored formal trousers, pleated styles, Gurkha cuts and cotton twill chinos.", displayOrder:2 },
@@ -214,11 +214,3 @@ async function main() {
   console.log("All demo products are marked isFixture=true. Verify all claims, images, prices and inventory before taking real orders.");
 }
 
-main()
-  .catch((error) => {
-    console.error("Demo catalogue seed failed:",error);
-    process.exitCode=1;
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
