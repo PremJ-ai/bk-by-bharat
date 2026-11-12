@@ -327,33 +327,30 @@ async function main() {
       productId = product.id;
     }
 
-    // Clean any existing variants with these SKUs across all products
-    const skus = item.variants.map((v) => v.sku);
-    await prisma.productVariant.deleteMany({
-      where: {
-        OR: [
-          { productId },
-          { sku: { in: skus } },
-        ],
-      },
-    });
-
-    // Variants
-    await prisma.productVariant.createMany({
-      data: item.variants.map((v) => ({
-        productId,
-        sku: v.sku,
-        size: v.size,
-        colorName: v.colorName,
-        colorHex: v.colorHex,
-        stock: v.stock,
-      })),
-    });
-
-    // Clean existing media links for this product
-    await prisma.productMedia.deleteMany({
-      where: { productId },
-    });
+    // Upsert variants without deleting rows or resetting existing stock/reservations.
+    // This keeps variant IDs referenced by existing order history stable.
+    for (const variant of item.variants) {
+      await prisma.productVariant.upsert({
+        where: { sku: variant.sku },
+        update: {
+          productId,
+          size: variant.size,
+          colorName: variant.colorName,
+          colorHex: variant.colorHex,
+          isActive: true,
+        },
+        create: {
+          productId,
+          sku: variant.sku,
+          size: variant.size,
+          colorName: variant.colorName,
+          colorHex: variant.colorHex,
+          stock: variant.stock,
+          reservedStock: 0,
+          isActive: true,
+        },
+      });
+    }
 
     // Media
     for (let i = 0; i < item.media.length; i++) {
@@ -372,14 +369,29 @@ async function main() {
         },
       });
 
-      await prisma.productMedia.create({
-        data: {
-          productId,
-          mediaAssetId: asset.id,
-          isPrimary: m.isPrimary ?? i === 0,
-          sortOrder: i,
-        },
+      const existingLink = await prisma.productMedia.findFirst({
+        where: { productId, mediaAssetId: asset.id },
       });
+      if (existingLink) {
+        await prisma.productMedia.update({
+          where: { id: existingLink.id },
+          data: {
+            isPrimary: m.isPrimary ?? i === 0,
+            sortOrder: i,
+            mediaType: "IMAGE",
+          },
+        });
+      } else {
+        await prisma.productMedia.create({
+          data: {
+            productId,
+            mediaAssetId: asset.id,
+            isPrimary: m.isPrimary ?? i === 0,
+            sortOrder: i,
+            mediaType: "IMAGE",
+          },
+        });
+      }
     }
 
     console.log(`✓ Seeded product: ${item.name} (${item.slug})`);
