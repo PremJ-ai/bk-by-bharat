@@ -16,8 +16,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "db:seed": "tsx src/db/seed.ts",
-    "admin:bootstrap": "tsx src/scripts/bootstrap-admin.ts",
-    "db:seed:demo": "tsx src/db/seed-demo-catalog.ts"
+    "admin:bootstrap": "tsx src/scripts/bootstrap-admin.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.4.1",
