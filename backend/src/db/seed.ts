@@ -1,4 +1,5 @@
 import { prisma } from "./prisma.js";
+import { seedAdditionalCatalogue } from "./seed-demo-catalog.js";
 
 async function main() {
   console.log("🌱 Starting catalog and store settings seed...");
@@ -384,7 +385,9 @@ async function main() {
     console.log(`✓ Seeded product: ${item.name} (${item.slug})`);
   }
 
-  console.log("🎉 Catalog seeding completed successfully!");
+  console.log("✓ Core catalogue seeded. Adding collections and sample garments...");
+  await seedAdditionalCatalogue();
+  console.log("🎉 Full BK by Bharat catalogue seeding completed successfully!");
 }
 
 main()
