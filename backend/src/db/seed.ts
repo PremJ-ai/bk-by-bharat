@@ -1,5 +1,5 @@
 import { prisma } from "./prisma.js";
-import { seedAdditionalCatalogue } from "./seed-demo-catalog.js";
+import { seedAdditionalCatalogue } from "./sample-catalogue.js";
 
 async function main() {
   console.log("🌱 Starting catalog and store settings seed...");
