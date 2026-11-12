@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma.js";
 
 /**
@@ -155,7 +156,7 @@ async function main() {
     const product = existing
       ? await prisma.product.update({where:{id:existing.id},data:{
           name:item.name,description:item.description,longDescription:item.longDescription,
-          material:item.material,fabricSpecifications:item.fabric as object,badge:item.badge,
+          material:item.material,fabricSpecifications:item.fabric as unknown as Prisma.InputJsonValue,badge:item.badge,
           status:"PUBLISHED",publishedAt:existing.publishedAt ?? new Date(),
           pricePaise:item.pricePaise,categoryId,details:[...item.details],
           careInstructions:[...item.care],isFixture:true,
