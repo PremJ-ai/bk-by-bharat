@@ -1,11 +1,11 @@
 export interface ProductVariantViewModel {
   id?: string;
-  sku: string;
+  sku?: string;
   size: string;
   colorName?: string | null;
   stock: number;
   available: boolean;
-  pricePaise: number;
+  pricePaise?: number;
 }
 
 export interface ProductColorViewModel {
