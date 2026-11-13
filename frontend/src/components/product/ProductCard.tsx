@@ -82,7 +82,7 @@ export function ProductCard({ product, priority }: ProductCardProps) {
         material: product.material,
         size: selectedVariant.size,
         color: selectedVariant.colorName || selectedColor || undefined,
-        pricePaise: selectedVariant.pricePaise,
+        pricePaise: selectedVariant.pricePaise ?? product.pricePaise,
         quantity: 1,
         imageUrl: product.imageUrl,
       },
