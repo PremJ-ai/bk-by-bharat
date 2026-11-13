@@ -2,7 +2,7 @@
 
 import { useState, use, useEffect, useRef } from "react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, useRouter } from "next/navigation";
 import { AnnouncementBar } from "@/components/layout/AnnouncementBar";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   ChevronDown,
   ShoppingBag,
+  ArrowRight,
   Sparkles,
   Loader2,
 } from "lucide-react";
@@ -33,6 +34,7 @@ interface ProductPageProps {
 
 export default function ProductDetailPage({ params }: ProductPageProps) {
   const resolvedParams = use(params);
+  const router = useRouter();
   const [product, setProduct] = useState<DetailedProductModel | null>(null);
   const [loading, setLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -156,24 +158,36 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
     { label: "Origin", value: fabricSpecifications?.origin },
   ].filter((row) => row.value !== undefined && row.value !== null && row.value !== "");
 
+  const addSelectedItem = (openCart: boolean) => {
+    if (!selectedSize || !selectedSizeObj?.available) return false;
+
+    addItem(
+      {
+        productId: product.id,
+        variantId: selectedSizeObj.id,
+        name: product.name,
+        slug: product.slug,
+        material: product.material,
+        size: selectedSize,
+        color: selectedColor,
+        pricePaise: selectedSizeObj.pricePaise,
+        quantity: 1,
+        imageUrl: product.imageUrl,
+      },
+      { openCart }
+    );
+    return true;
+  };
+
   const handleAddToCart = () => {
-    if (!selectedSize || !selectedSizeObj?.available) return;
-
-    addItem({
-      productId: product.id,
-      variantId: selectedSizeObj?.id,
-      name: product.name,
-      slug: product.slug,
-      material: product.material,
-      size: selectedSize,
-      color: selectedColor,
-      pricePaise: selectedSizeObj.pricePaise,
-      quantity: 1,
-      imageUrl: product.imageUrl,
-    });
-
+    if (!addSelectedItem(true)) return;
     setAddedAnimation(true);
     setTimeout(() => setAddedAnimation(false), 1500);
+  };
+
+  const handleBuyNow = () => {
+    if (!addSelectedItem(false)) return;
+    router.push("/checkout");
   };
 
   const toggleAccordion = (section: string) => {
@@ -359,26 +373,36 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
               </div>
             </div>
 
-            {/* Primary Action Button */}
+            {/* Purchase actions */}
             <div className="space-y-3 pt-2">
-              <button
-                type="button"
-                onClick={handleAddToCart}
-                disabled={!isAvailable}
-                className="w-full bg-navy text-canvas hover:bg-gold hover:text-navy py-4 px-6 text-xs uppercase tracking-caps font-semibold flex items-center justify-center space-x-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-              >
-                {addedAnimation ? (
-                  <>
-                    <Sparkles className="w-4 h-4 text-gold animate-bounce" />
-                    <span>Added to Atelier Bag</span>
-                  </>
-                ) : (
-                  <>
-                    <ShoppingBag className="w-4 h-4" />
-                    <span>Add to Atelier Bag &mdash; {formatINR(product.pricePaise)}</span>
-                  </>
-                )}
-              </button>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={handleAddToCart}
+                  disabled={!isAvailable}
+                  className="min-h-12 w-full bg-navy px-4 py-3 text-xs font-semibold uppercase tracking-caps text-canvas shadow-md transition-all duration-200 hover:bg-gold hover:text-navy disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {addedAnimation ? (
+                    <span className="inline-flex items-center justify-center gap-2">
+                      <Sparkles className="h-4 w-4 text-gold animate-bounce" />
+                      Added to bag
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center justify-center gap-2">
+                      <ShoppingBag className="h-4 w-4" />
+                      Add to cart
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBuyNow}
+                  disabled={!isAvailable}
+                  className="inline-flex min-h-12 w-full items-center justify-center gap-2 border border-navy px-4 py-3 text-xs font-semibold uppercase tracking-caps text-navy transition-colors hover:bg-[#eee5d8] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Buy now <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
 
               <p className="text-center text-[11px] text-muted font-sans">
                 Guest checkout &middot; No account required
