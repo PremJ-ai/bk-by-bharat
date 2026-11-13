@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowRight, CheckCircle2, ShoppingBag, ShoppingCart, X } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, ShoppingBag, X } from "lucide-react";
 import { ProductMedia } from "@/components/media/ProductMedia";
 import { useCart } from "@/context/CartContext";
 import { trackGA4Event, toGA4Item } from "@/lib/analytics/ga4";
