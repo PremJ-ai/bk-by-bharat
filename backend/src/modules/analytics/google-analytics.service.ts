@@ -1,4 +1,4 @@
-import { createSign } from "node:crypto";
+import { createHash, createSign } from "node:crypto";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REPORT_URL = "https://analyticsdata.googleapis.com/v1beta/properties";
@@ -10,12 +10,13 @@ type CachedToken = {
   expiresAt: number;
 };
 
-let tokenCache: CachedToken | null = null;
-let reportCache: { value: GA4Overview; expiresAt: number } | null = null;
+const tokenCache = new Map<string, CachedToken>();
+const reportCache = new Map<string, { value: GA4Overview; expiresAt: number }>();
 
 export interface GA4Overview {
   configured: boolean;
   propertyId?: string;
+  currencyCode?: string;
   period: "last_7_days";
   updatedAt?: string;
   metrics: {
@@ -39,11 +40,32 @@ function numericMetric(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizePrivateKey(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  return value
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "\n")
+    .replace(/\r\n/g, "\n")
+    .trim();
+}
+
+function safeGoogleError(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== "object") return undefined;
+  const error = (payload as { error?: { message?: unknown; status?: unknown } }).error;
+  if (!error || typeof error !== "object") return undefined;
+  const message = typeof error.message === "string" ? error.message : undefined;
+  const status = typeof error.status === "string" ? error.status : undefined;
+  return [status, message].filter(Boolean).join(": ").slice(0, 500) || undefined;
+}
+
 export class GoogleAnalyticsService {
   private getConfiguration() {
     const propertyId = process.env.GOOGLE_ANALYTICS_PROPERTY_ID?.trim();
     const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim();
-    const privateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, "\n");
+    const privateKey = normalizePrivateKey(process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY);
 
     const missing: string[] = [];
     if (!propertyId) missing.push("GOOGLE_ANALYTICS_PROPERTY_ID");
@@ -52,6 +74,12 @@ export class GoogleAnalyticsService {
 
     if (propertyId && !/^\d+$/.test(propertyId)) {
       missing.push("GOOGLE_ANALYTICS_PROPERTY_ID (must be the numeric GA4 property ID)");
+    }
+    if (clientEmail && !/^[^\s@]+@[^\s@]+\.iam\.gserviceaccount\.com$/i.test(clientEmail)) {
+      missing.push("GOOGLE_SERVICE_ACCOUNT_EMAIL (must be a service-account email)");
+    }
+    if (privateKey && (!privateKey.includes("-----BEGIN PRIVATE KEY-----") || !privateKey.includes("-----END PRIVATE KEY-----"))) {
+      missing.push("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY (invalid PEM format)");
     }
 
     return { propertyId, clientEmail, privateKey, missing };
@@ -68,11 +96,18 @@ export class GoogleAnalyticsService {
       };
     }
 
-    if (reportCache && reportCache.expiresAt > Date.now()) {
-      return reportCache.value;
+    const cacheKey = createHash("sha256")
+      .update(`${config.propertyId}: ${config.clientEmail}`)
+      .digest("hex");
+    const cachedReport = reportCache.get(cacheKey);
+    if (cachedReport && cachedReport.expiresAt > Date.now()) {
+      return cachedReport.value;
     }
 
-    const accessToken = await this.getAccessToken(config.clientEmail!, config.privateKey!);
+    const accessToken = await this.getAccessToken(
+      config.clientEmail!,
+      config.privateKey!,
+    );
     const response = await fetch(
       `${REPORT_URL}/${config.propertyId}:runReport`,
       {
@@ -82,7 +117,8 @@ export class GoogleAnalyticsService {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          dateRanges: [{ startDate: "7daysAgo", endDate: "today" }],
+          dateRanges: [{ startDate: "6daysAgo", endDate: "today" }],
+          metricAggregations: ["TOTAL"],
           metrics: [
             { name: "activeUsers" },
             { name: "sessions" },
@@ -94,22 +130,30 @@ export class GoogleAnalyticsService {
           ],
         }),
         signal: AbortSignal.timeout(12000),
-      }
+      },
     );
 
+    const reportPayload = await response.json().catch(() => null);
     if (!response.ok) {
-      // Do not expose Google's response body or credentials in API errors.
+      const googleMessage = safeGoogleError(reportPayload);
+      if (response.status === 403) {
+        throw new Error(
+          `Google Analytics access denied. Confirm Analytics Data API is enabled and ${config.clientEmail} has Viewer access to property ${config.propertyId}.${googleMessage ? ` Google: ${googleMessage}` : ""}`,
+        );
+      }
       throw new Error(
-        response.status === 403
-          ? "Google Analytics access is denied. Confirm that the Data API is enabled and the service account has Viewer access to this GA4 property."
-          : `Google Analytics Data API request failed (HTTP ${response.status}).`
+        `Google Analytics Data API returned HTTP ${response.status}.${googleMessage ? ` Google: ${googleMessage}` : ""}`,
       );
     }
 
-    const report = (await response.json()) as {
+    const report = reportPayload as {
       rows?: Array<{ metricValues?: Array<{ value?: string }> }>;
       totals?: Array<{ metricValues?: Array<{ value?: string }> }>;
-    };
+      currencyCode?: string;
+    } | null;
+    if (!report) {
+      throw new Error("Google Analytics returned an empty report response.");
+    }
 
     const metricValues =
       report.totals?.[0]?.metricValues ||
@@ -128,18 +172,21 @@ export class GoogleAnalyticsService {
     const result: GA4Overview = {
       configured: true,
       propertyId: config.propertyId,
+      currencyCode: report.currencyCode || "INR",
       period: "last_7_days",
       updatedAt: new Date().toISOString(),
       metrics,
     };
 
-    reportCache = { value: result, expiresAt: Date.now() + CACHE_TTL_MS };
+    reportCache.set(cacheKey, { value: result, expiresAt: Date.now() + CACHE_TTL_MS });
     return result;
   }
 
   private async getAccessToken(clientEmail: string, privateKey: string): Promise<string> {
-    if (tokenCache && tokenCache.expiresAt > Date.now() + 60_000) {
-      return tokenCache.accessToken;
+    const cacheKey = createHash("sha256").update(clientEmail).digest("hex");
+    const cached = tokenCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now() + 60_000) {
+      return cached.accessToken;
     }
 
     const nowSeconds = Math.floor(Date.now() / 1000);
@@ -151,13 +198,21 @@ export class GoogleAnalyticsService {
         aud: TOKEN_URL,
         iat: nowSeconds,
         exp: nowSeconds + 3600,
-      })
+      }),
     );
     const unsignedAssertion = `${header}.${claim}`;
     const signer = createSign("RSA-SHA256");
     signer.update(unsignedAssertion);
     signer.end();
-    const signature = signer.sign(privateKey, "base64url");
+
+    let signature: string;
+    try {
+      signature = signer.sign(privateKey, "base64url");
+    } catch {
+      throw new Error(
+        "Google service-account private key could not be parsed. Re-copy the complete private_key value from the service-account JSON into the backend environment, preserving PEM line breaks.",
+      );
+    }
     const assertion = `${unsignedAssertion}.${signature}`;
 
     const body = new URLSearchParams({
@@ -171,25 +226,27 @@ export class GoogleAnalyticsService {
       body,
       signal: AbortSignal.timeout(10000),
     });
-
+    const tokenPayload = await response.json().catch(() => null);
     if (!response.ok) {
-      throw new Error("Google service-account authentication failed. Check the server-side service-account credentials.");
+      const googleMessage = safeGoogleError(tokenPayload);
+      throw new Error(
+        `Google service-account authentication failed (HTTP ${response.status}). Check that the key is active and belongs to ${clientEmail}.${googleMessage ? ` Google: ${googleMessage}` : ""}`,
+      );
     }
 
-    const tokenResponse = (await response.json()) as {
+    const tokenResponse = tokenPayload as {
       access_token?: string;
       expires_in?: number;
-    };
-
-    if (!tokenResponse.access_token) {
+    } | null;
+    if (!tokenResponse?.access_token) {
       throw new Error("Google did not return an Analytics access token.");
     }
 
-    tokenCache = {
+    tokenCache.set(cacheKey, {
       accessToken: tokenResponse.access_token,
       expiresAt: Date.now() + (tokenResponse.expires_in || 3600) * 1000,
-    };
+    });
 
-    return tokenCache.accessToken;
+    return tokenResponse.access_token;
   }
 }
