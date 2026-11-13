@@ -183,6 +183,7 @@ export default function AdminOverviewPage() {
       </section>
 
       <section data-admin-reveal aria-label="Storefront analytics">
+        <AnalyticsOverviewPanel />
       </section>
 
       <section data-admin-reveal className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
@@ -306,7 +307,6 @@ export default function AdminOverviewPage() {
           </div>
         </div>
 
-        <AnalyticsOverviewPanel />
       </section>
     </div>
   );
