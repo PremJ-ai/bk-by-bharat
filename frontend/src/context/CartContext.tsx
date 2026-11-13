@@ -22,7 +22,7 @@ interface CartContextType {
   isOpen: boolean;
   openCart: () => void;
   closeCart: () => void;
-  addItem: (item: Omit<CartItem, "id">) => void;
+  addItem: (item: Omit<CartItem, "id">, options?: { openCart?: boolean }) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, delta: number) => void;
   clearCart: () => void;
@@ -67,7 +67,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const openCart = useCallback(() => setIsOpen(true), []);
   const closeCart = useCallback(() => setIsOpen(false), []);
 
-  const addItem = (item: Omit<CartItem, "id">) => {
+  const addItem = (item: Omit<CartItem, "id">, options: { openCart?: boolean } = {}) => {
     const compositeId = `${item.productId}-${item.size}-${item.color || "std"}`;
     trackGA4Event("add_to_cart", {
       currency: "INR",
@@ -90,7 +90,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       }
       return [...prev, { ...item, id: compositeId }];
     });
-    setIsOpen(true);
+    setIsOpen(options.openCart !== false);
   };
 
   const removeItem = (id: string) => {
