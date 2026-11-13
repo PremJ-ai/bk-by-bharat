@@ -21,7 +21,7 @@ function configureAnalytics(propertyId = "987654321") {
     publicKeyEncoding: { type: "spki", format: "pem" },
   });
   vi.stubEnv("GOOGLE_ANALYTICS_PROPERTY_ID", propertyId);
-  vi.stubEnv("GOOGLE_SERVICE_ACCOUNT_EMAIL", "bk-analytics-test@bk-test.iam.gserviceaccount.com");
+  vi.stubEnv("GOOGLE_SERVICE_ACCOUNT_EMAIL", `bk-analytics-${propertyId}@bk-test.iam.gserviceaccount.com`);
   // Exercise the escaped-newline format commonly used in Vercel environment values.
   vi.stubEnv("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY", privateKey.replace(/\n/g, "\\n"));
 }
