@@ -483,20 +483,33 @@ export default function GuestCheckoutPage() {
               </div>
 
               {/* Itemized Lines */}
-              <div className="divide-y divide-border/60 max-h-72 overflow-y-auto pr-1">
+              <div className="divide-y divide-border/60 max-h-80 overflow-y-auto pr-1">
                 {items.map((item) => (
-                  <div key={item.id} className="py-3.5 first:pt-0 last:pb-0 flex justify-between text-xs">
-                    <div>
-                      <h4 className="font-medium text-ink leading-tight font-sans">
-                        {item.name}
-                      </h4>
-                      <p className="text-muted text-[11px] mt-0.5">
+                  <div key={item.id} className="flex gap-3 py-3.5 first:pt-0 last:pb-0 text-xs">
+                    <div className="h-20 w-16 shrink-0 overflow-hidden border border-border bg-surface-muted">
+                      {item.imageUrl ? (
+                        <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <span className="flex h-full items-center justify-center font-display text-sm text-muted/50">
+                          {item.name.slice(0, 2).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <h4 className="font-medium leading-tight text-ink font-sans">{item.name}</h4>
+                        <span className="shrink-0 pl-2 font-semibold tabular-nums text-ink">
+                          {formatINR(item.pricePaise * item.quantity)}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[11px] text-muted">{item.material}</p>
+                      <p className="mt-1 text-[11px] text-muted">
                         Size: {item.size} {item.color ? `· ${item.color}` : ""} · Qty: {item.quantity}
                       </p>
+                      <p className="mt-1 text-[10px] text-muted/80">
+                        Unit price: {formatINR(item.pricePaise)}
+                      </p>
                     </div>
-                    <span className="font-semibold text-ink font-sans tabular-nums pl-4">
-                      {formatINR(item.pricePaise * item.quantity)}
-                    </span>
                   </div>
                 ))}
               </div>
@@ -512,9 +525,12 @@ export default function GuestCheckoutPage() {
                   <span className="text-muted font-medium">Shown on invoice</span>
                 </div>
                 <div className="flex justify-between text-base font-semibold text-ink pt-2 border-t border-border">
-                  <span>Payable Total</span>
+                  <span>Order Subtotal</span>
                   <span className="tabular-nums text-lg">{formatINR(subtotalPaise)}</span>
                 </div>
+                <p className="text-[10px] leading-relaxed text-muted">
+                  Final invoice, including confirmed shipping and any additional charges, will be shared by the atelier before payment.
+                </p>
               </div>
 
               {/* Workflow Guidance Card */}

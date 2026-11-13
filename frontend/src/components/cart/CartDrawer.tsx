@@ -338,10 +338,10 @@ export function CartDrawer() {
                 </div>
                 <div className="flex justify-between text-[11px]">
                   <span>Shipping &amp; Transit</span>
-                  <span className="text-stock-ok font-medium">Complimentary</span>
+                  <span className="font-medium text-muted">Confirmed on invoice</span>
                 </div>
                 <p className="text-[10px] text-muted/70 pt-1">
-                  Tax and final invoice confirmed by studio prior to WhatsApp QR billing.
+                  Final invoice, including shipping and any additional charges, is confirmed by the studio before payment.
                 </p>
               </div>
 
