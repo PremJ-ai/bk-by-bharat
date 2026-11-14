@@ -783,3 +783,32 @@
   from { opacity: 0; transform: translateY(5px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+
+/* Google Analytics dashboard cards: responsive and readable at phone widths. */
+.admin-ui .admin-ga4-icon--blue { background: #e5efff; color: #2461c8; }
+.admin-ui .admin-ga4-icon--green { background: #e2f7ee; color: #11865e; }
+.admin-ui .admin-ga4-icon--purple { background: #f0e9ff; color: #7041bd; }
+.admin-ui .admin-ga4-icon--orange { background: #fff0e4; color: #b85d1b; }
+.admin-ui .admin-ga4-icon--pink { background: #fce6f1; color: #b52d70; }
+.admin-ui .admin-ga4-icon--teal { background: #e1f7f6; color: #087e79; }
+.admin-ui .admin-ga4-icon--gold { background: #fff5dc; color: #8a5b00; }
+
+@media (max-width: 760px) {
+  .admin-ui .admin-ga4-icon--blue,
+  .admin-ui .admin-ga4-icon--green,
+  .admin-ui .admin-ga4-icon--purple,
+  .admin-ui .admin-ga4-icon--orange,
+  .admin-ui .admin-ga4-icon--pink,
+  .admin-ui .admin-ga4-icon--teal,
+  .admin-ui .admin-ga4-icon--gold {
+    width: 30px;
+    height: 30px;
+  }
+}
+
+@media (max-width: 380px) {
+  .admin-ui .admin-panel {
+    padding: 12px;
+  }
+}
