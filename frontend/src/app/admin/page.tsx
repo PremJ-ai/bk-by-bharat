@@ -182,6 +182,10 @@ export default function AdminOverviewPage() {
         ))}
       </section>
 
+      <section data-admin-reveal aria-label="Storefront analytics">
+        <AnalyticsOverviewPanel />
+      </section>
+
       <section data-admin-reveal className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
         <div className="admin-panel">
           <div className="flex items-start justify-between gap-3">
@@ -270,7 +274,7 @@ export default function AdminOverviewPage() {
         </div>
       </section>
 
-      <section data-admin-reveal className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(260px,0.85fr)]">
+      <section data-admin-reveal>
         <div className="admin-panel">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -303,7 +307,6 @@ export default function AdminOverviewPage() {
           </div>
         </div>
 
-        <AnalyticsOverviewPanel />
       </section>
     </div>
   );
